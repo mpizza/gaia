@@ -1,4 +1,8 @@
 'use strict';
+var gCtx = null;
+var gCanvas = null;
+var stop = null;
+var imageData = null;
 
 var Camera = {
   _camera: 0,
@@ -15,6 +19,10 @@ var Camera = {
     return document.getElementById('capture-button'); 
   },
 
+  get qrCanvas() {
+    return document.getElementById('qr-canvas'); 
+  },
+  
   get galleryButton() {
     return document.getElementById('gallery-button');
   },
@@ -22,13 +30,26 @@ var Camera = {
   init: function cameraInit() {
     this.switchButton.addEventListener('click', this.toggleCamera.bind(this));
     this.galleryButton.addEventListener('click', function() {
-      // This is bad. It should eventually become a Web Intent.
-      var host = document.location.host;
-      var domain = host.replace(/(^[\w\d]+\.)?([\w\d]+\.[a-z]+)/, '$2');
-      window.parent.WindowManager.launch('http://gallery.' + domain);
+      // This is bad. It should eventually become a hyperlink or Web Intent.
+      window.parent.WindowManager.launch('../gallery/gallery.html');
     });
-
+    
+    
     this.setSource(this._camera);
+    
+    //qr code init
+    var v =this.viewfinder;
+    var cw, ch;
+    var canvas_qr = document.getElementById('qr-canvas');
+    var context = canvas_qr.getContext('2d');
+    this.setCanvas(); 
+    v.addEventListener('play', function() {
+      cw = v.clientWidth;
+      ch = v.clientHeight;
+      canvas_qr.height = ch;
+      canvas_qr.width = cw;
+      drawVideo(v, context, cw, ch, qrcode.stop);
+    },false);
   },
 
   setSource: function camera_setSource(camera) {
@@ -62,13 +83,31 @@ var Camera = {
     if(navigator.mozCamera)
       viewfinder.src = navigator.mozCamera.getCameraURI(config);
   },
+  
+  setCanvas: function set_canvas() {
+    var width, height;
+    var qrCanvas = this.qrCanvas;
+
+    width = document.body.clientHeight;
+    height = document.body.clientWidth;
+      
+    var top = ((width/2) - ((height)/2));
+    var left = -((width/2) - (height/2));
+    qrCanvas.style.top = top + 'px';
+    qrCanvas.style.left = left + 'px';
+
+    var transform = 'rotate(90deg)';
+    if (this._camera == 1)
+      transform += ' scale(-1, 1)';
+
+    qrCanvas.style.MozTransform = transform;
+    qrCanvas.style.width = width + 'px';
+    qrCanvas.style.height = height + 'px';
+   
+  },
 
   pause: function pause() {
     this.viewfinder.pause();
-  },
-
-  resume: function resume() {
-    this.viewfinder.play();
   },
 
   toggleCamera: function toggleCamera() {
@@ -90,13 +129,29 @@ window.addEventListener('message', function CameraPause(evt) {
     return;
 
   if (evt.data.hidden) {
-    // If we're hidden, stop the video
     Camera.pause();
   } else {
-    // If we become visible again, first reconfigure the camera
-    // in case the screen has rotated or something, and then 
-    // resume the video.
-    Camera.setSource(Camera._camera);
-    Camera.resume();
+    Camera.init();
   }
 });
+
+function read(a) {
+  if (qrcode.stop != null) {
+    var v = document.getElementById('viewfinder');
+    clearTimeout(qrcode.stop);
+    v.pause();
+  }
+  alert(a);
+  //console.log("result:"+a);
+}
+
+function drawVideo(v, context, cw, ch, stop) {
+  if (v.paused || v.ended) {
+    return false;
+  }
+  context.drawImage(v, 0, 0, cw, ch);
+  qrcode.callback = read;
+  // detec again?
+  qrcode.stop = setTimeout(drawVideo, 20, v, context, cw, ch, qrcode.stop);
+  qrcode.decode();
+}
