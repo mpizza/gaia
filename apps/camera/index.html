@@ -5,17 +5,33 @@
     <meta http-equiv="pragma" content="no-cache">
     <title>Camera</title>
     <link type="text/css" rel="stylesheet" href="style/camera.css"/>
-    <script type="text/javascript" src="js/camera.js"></script>
   </head>
   <body>
-
-    <video id="viewfinder" autoplay> </video>
+    <canvas id="qr-canvas"></canvas>
+    <video id="viewfinder" autoplay></video>
 
     <div id="controls">
       <a id="switch-button" name="Switch source"></a>
       <a id="capture-button" name="Capture"></a>
       <a id="gallery-button" name="Go to gallery"></a>
     </div>
-
-  </body>
+    <script type="text/javascript" src="js/grid.js"></script>
+		<script type="text/javascript" src="js/version.js"></script>
+		<script type="text/javascript" src="js/detector.js"></script>
+		<script type="text/javascript" src="js/formatinf.js"></script>
+		<script type="text/javascript" src="js/errorlevel.js"></script>
+		<script type="text/javascript" src="js/bitmat.js"></script>
+		<script type="text/javascript" src="js/datablock.js"></script>
+		<script type="text/javascript" src="js/bmparser.js"></script>
+		<script type="text/javascript" src="js/datamask.js"></script>
+		<script type="text/javascript" src="js/rsdecoder.js"></script>
+		<script type="text/javascript" src="js/gf256poly.js"></script>
+		<script type="text/javascript" src="js/gf256.js"></script>
+		<script type="text/javascript" src="js/decoder.js"></script>
+		<script type="text/javascript" src="js/qrcode.js"></script>
+		<script type="text/javascript" src="js/findpat.js"></script>
+		<script type="text/javascript" src="js/alignpat.js"></script>
+		<script type="text/javascript" src="js/databr.js"></script>
+		<script type="text/javascript" src="js/camera.js"></script>
+	</body>
 </html>
