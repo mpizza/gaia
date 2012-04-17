@@ -38,18 +38,22 @@ var Camera = {
     this.setSource(this._camera);
     
     //qr code init
-    
     var v =this.viewfinder;
     var cw, ch;
     var canvas_qr = this.qrCanvas;
     var context = canvas_qr.getContext('2d');
     this.setCanvas(); 
+    
+    var back = document.createElement('canvas');
+		var backcontext = back.getContext('2d');
+		
     v.addEventListener('play', function() {
       cw = v.clientWidth;
       ch = v.clientHeight;
       canvas_qr.height = ch;
       canvas_qr.width = cw;
-      drawVideo(v, context, cw, ch, qrcode.stop);
+      //drawVideo(v, context, cw, ch, qrcode.stop);
+      draw_grey(v, context, backcontext, cw, ch)
     },false);
     
   },
@@ -148,6 +152,31 @@ function read(a) {
   console.log("result:"+a);
 }
 
+function draw_grey(v,c,bc,w,h) {
+    if(v.paused || v.ended)	return false;
+    // First, draw it into the backing canvas
+    bc.drawImage(v, 0 ,0 ,w ,h);
+    // Grab the pixel data from the backing canvas
+    var idata = bc.getImageData(0,0,w,h);
+    var data = idata.data;
+    
+    // Loop through the pixels, turning them grayscale
+    for(var i = 0; i < data.length; i+=4) {
+      var r = data[i];
+      var g = data[i+1];
+      var b = data[i+2];
+      var brightness = (3*r+4*g+b)>>>3;
+      data[i] = brightness;
+      data[i+1] = brightness;
+      data[i+2] = brightness;
+    }
+    idata.data = data;
+    // Draw the pixels onto the visible canvas
+    c.putImageData(idata,0,0);
+    // Start over!
+    setTimeout(draw_grey, 20, v, c, bc ,w, h);
+}
+	
 function drawVideo(v, context, cw, ch, stop) {
   if (v.paused || v.ended) {
     return false;
