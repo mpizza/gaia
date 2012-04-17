@@ -38,9 +38,10 @@ var Camera = {
     this.setSource(this._camera);
     
     //qr code init
+    
     var v =this.viewfinder;
     var cw, ch;
-    var canvas_qr = document.getElementById('qr-canvas');
+    var canvas_qr = this.qrCanvas;
     var context = canvas_qr.getContext('2d');
     this.setCanvas(); 
     v.addEventListener('play', function() {
@@ -50,6 +51,7 @@ var Camera = {
       canvas_qr.width = cw;
       drawVideo(v, context, cw, ch, qrcode.stop);
     },false);
+    
   },
 
   setSource: function camera_setSource(camera) {
@@ -82,6 +84,7 @@ var Camera = {
     viewfinder.style.height = height + 'px';
     if(navigator.mozCamera)
       viewfinder.src = navigator.mozCamera.getCameraURI(config);
+    
   },
   
   setCanvas: function set_canvas() {
@@ -141,8 +144,8 @@ function read(a) {
     clearTimeout(qrcode.stop);
     v.pause();
   }
-  alert(a);
-  //console.log("result:"+a);
+  //alert(a);
+  console.log("result:"+a);
 }
 
 function drawVideo(v, context, cw, ch, stop) {

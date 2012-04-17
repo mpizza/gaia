@@ -20,6 +20,7 @@ html, body {
   text-align: center;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
+  z-index:4;
 }
 
 #switch-button {
@@ -60,4 +61,13 @@ html, body {
 
 #gallery-button:active {
   background-image: url('images/gallery-pressed.png');
+}
+
+video{
+  position:absolute;
+  z-index:1;
+}
+#qr-canvas{
+  position:absolute;
+  z-index:3;
 }
