@@ -36,8 +36,9 @@ var Camera = {
     
     
     this.setSource(this._camera);
-    
+    console.log('pizaza debug:'+this.viewfinder.src);   
     //qr code init
+    /*
     var v =this.viewfinder;
     var cw, ch;
     var canvas_qr = this.qrCanvas;
@@ -55,7 +56,7 @@ var Camera = {
       //drawVideo(v, context, cw, ch, qrcode.stop);
       draw_grey(v, context, backcontext, cw, ch)
     },false);
-    
+    */
   },
 
   setSource: function camera_setSource(camera) {
