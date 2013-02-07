@@ -1,11 +1,16 @@
 (function(window) {
   var Week = Calendar.Template.create({
     header: function() {
-      return '<h1 class="date">' + this.h('value') + '</h1>';
+      return '<h1>' + this.h('value') + '</h1>';
     },
 
     sidebarHour: function() {
-      return '<li class="hour-' + this.h('hour') + '">' + this.h('displayHour') + '</li>';
+      var hour = this.h('hour');
+      var displayHour = this.h('displayHour');
+
+      return '<li ' + hour + ' class="hour-' + this.h('hour') + '">' +
+                displayHour +
+              '</li>';
     },
 
     hour: function() {

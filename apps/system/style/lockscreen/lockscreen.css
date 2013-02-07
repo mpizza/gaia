@@ -1,9 +1,8 @@
 #lockscreen {
   position: absolute;
-  /* 20px = height of status bar */
-  top: 20px;
-  width: calc(100%);
-  height: calc(100% - 20px);
+  top: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background-color: #000;
 
@@ -76,44 +75,39 @@
 #lockscreen-container {
   width: 100%;
   height: 100%;
+
+  /**
+   * Workaround bug 823418 by trigger a repaint as soon as .screenoff class
+   * is removed, remove me when the bug is fixed.
+   */
+  transition: opacity 0.1s ease;
+}
+
+/**
+ * Workaround bug 823418 by trigger a repaint as soon as .screenoff class
+ * is removed, remove me when the bug is fixed.
+ */
+.screenoff #lockscreen-container {
+  opacity: 0.99;
+}
+
+.lockscreen-wallpaper {
+  position: absolute;
 }
 
 .lockscreen-panel {
+  position: absolute;
   width: 100%;
   height: 100%;
-  position: absolute;
-
-  background-color: #000;
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: 50% 50%;
 
   visibility: hidden;
   transition: visibility 0.5s ease, transform 0.5s ease;
-}
-
-.lockscreen-panel::before {
-  content: '';
-  display: block;
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* Replace this with radical gradient */
-  background: transparent url('./images/mask.png') 50% 50% no-repeat;
-  background-size: cover;
 }
 
 [data-panel="main"] #lockscreen-panel-main,
 [data-panel="passcode"] #lockscreen-panel-passcode,
 [data-panel="emergency-call"] #lockscreen-panel-emergency-call {
   visibility: inherit;
-}
-
-[data-panel="main"] #lockscreen-panel-main,
-[data-panel="passcode"] #lockscreen-panel-main {
-  transition: transform 0.5s ease;
 }
 
 [data-panel="emergency-call"] #lockscreen-panel-main {
@@ -129,20 +123,19 @@
   margin: 0;
   padding: 2.5rem 2.8rem;
   -moz-box-sizing: border-box;
-  text-transform: capitalize;
   font-size: 3.2rem;
   font-weight: normal;
   line-height: 3.2rem;
   text-shadow: 0 0 3px #333;
 
   transform: translateY(-10rem);
-  transition: transform 0.2s ease;
+  transition: transform 0.3s ease;
 }
 
 #lockscreen-header {
   z-index: 9999;
   position: absolute;
-  top: 0;
+  top: 2rem;   /* 2rem = height of status bar */
   left: 0;
   width: 100%;
   -moz-box-sizing: border-box;
@@ -150,7 +143,13 @@
   color: #fff;
   text-shadow: 0 0 3px #333;
   transform: translateY(-10rem);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 1;
+}
+
+[data-panel="passcode"] #lockscreen-header {
+  transform: translateY(0);
+  opacity: 0;
 }
 
 [data-panel="main"] #lockscreen-header {
@@ -186,6 +185,11 @@
   display: none;
 }
 
+#lockscreen-connstate.twolines > span:first-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
 /* For some reason display: inline-block disregards hidden attribute */
 #lockscreen-connstate[hidden] {
   display: none;
@@ -205,8 +209,8 @@
 }
 
 .lockscreen-clock {
-	margin: -0.8rem 0 -1rem -0.4rem;
-	font-weight: 300;
+  margin: -0.8rem 0 -1rem -0.4rem;
+  font-weight: 300;
 }
 
 #lockscreen-clock-numbers {
@@ -219,18 +223,18 @@
 
 #lockscreen-date {
   font-weight: 400;
-	font-size: calc(7 * 0.226rem);
+  font-size: calc(7 * 0.226rem);
 }
 
 .lockscreen-clock, #lockscreen-date {
-	font-family: 'MozTT', sans-serif;
+  font-family: 'MozTT', sans-serif;
   text-shadow: 1px 1px 3px #000000;
-	color: #fff;
+  color: #fff;
 }
 
 #lockscreen-area {
   position: absolute;
-  height: 16rem;
+  height: 11.2rem;
   left: 0;
   right: 0;
   bottom: 0;
@@ -352,6 +356,15 @@ button::-moz-focus-inner {
   transition: visibility 0.3s ease, transform 0.3s ease;
 }
 
+[data-passcode-status="success"] #lockscreen-passcode-pad,
+[data-passcode-status="success"] #lockscreen-passcode-code {
+  transform: translateY(calc(21.4rem + 7.2rem)) !important;
+}
+
+[data-passcode-status="success"] #lockscreen-passcode-status {
+  transform: translateY(-10rem) !important;
+}
+
 [data-panel="passcode"] #lockscreen-passcode-code {
   visibility: inherit;
   transform: translateY(0);
@@ -369,7 +382,6 @@ button::-moz-focus-inner {
   margin: 1.5rem 0.5rem;
   height: calc(100% - 3rem);
   text-align: center;
-  box-shadow: 0 0 0.8rem #999 inset;
   background-color: #fff;
   border-radius: 0.5rem;
 
@@ -377,19 +389,11 @@ button::-moz-focus-inner {
 }
 
 [data-passcode-status="error"] #lockscreen-passcode-code > span {
-  box-shadow: 0 0 0.8rem #f00 inset;
+  border: 0.1rem #B70404 solid;
 }
 
 [data-passcode-status="error"] #lockscreen-passcode-code > span[data-dot]::before {
-  background-color: #f00;
-}
-
-[data-passcode-status="success"] #lockscreen-passcode-code > span {
-  box-shadow: 0 0 0.8rem #0c0 inset;
-}
-
-[data-passcode-status="success"] #lockscreen-passcode-code > span[data-dot]::before {
-  background-color: #0c0;
+    background-color: #B70404;
 }
 
 #lockscreen-passcode-code > span[data-dot]::before {
@@ -450,6 +454,10 @@ button::-moz-focus-inner {
   text-shadow: 0 0 3px #000;
 }
 
+#lockscreen-passcode-pad > a:nth-child(3n+1):not([data-key="b"]) {
+  border-left: none;
+}
+
 #lockscreen-passcode-pad > a.last-row {
   height: 6.4rem;
 }
@@ -465,25 +473,26 @@ button::-moz-focus-inner {
   display: none;
 }
 
-@font-face {
-  font-family: 'Keyboard Symbols';
-  font-weight: bold;
-  src: url('fonts/Keyboard-Symbols.woff');
-}
-
 #lockscreen-passcode-pad > a[data-key="b"] {
   display: none;
-  text-align: center;
-  font-family: 'Keyboard Symbols', sans-serif;
+  background: url(images/icon-clear.png) no-repeat center center;
 }
 
 .passcode-entered #lockscreen-passcode-pad > a[data-key="b"] {
   display: block;
+  text-align: left;
+  text-indent: -9999px;
 }
 
 #lockscreen-passcode-pad > a:active {
-  background-color: rgb(0, 0, 0);
-  color: #ccc;
+  background-color: #00aacd;
+  color: #fff;
+  text-shadow: none;
+}
+
+#lockscreen-passcode-pad > a:active > span {
+  color: #fff;
+  text-shadow: none;
 }
 
 #lockscreen-passcode-pad > a.lockscreen-passcode-pad-func {

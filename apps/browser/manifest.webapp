@@ -10,7 +10,9 @@
   "permissions": {
     "browser":{},
     "systemXHR":{},
-    "settings":{ "access": "readonly" }
+    "settings":{ "access": "readonly" },
+    "geolocation" : {},
+    "desktop-notification" : {}
   },
   "locales": {
     "ar": {
@@ -38,7 +40,8 @@
   "activities": {
     "view": {
       "filters": {
-        "type": "url"
+        "type": "url",
+        "url": { "required":true, "regexp":"/^https?:/" }
       }
     }
   }

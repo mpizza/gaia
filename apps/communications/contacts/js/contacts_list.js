@@ -16,7 +16,7 @@ contacts.List = (function() {
       orderByLastName = null,
       emptyList = true;
 
-  var init = function load(element, overlay) {
+  var init = function load(element) {
     _ = navigator.mozL10n.get;
 
     cancel = document.getElementById('cancel-search'),
@@ -66,10 +66,7 @@ contacts.List = (function() {
     scrollable.scrollTop = domTarget.offsetTop;
   }
 
-  var load = function load(contacts, overlay) {
-    if (overlay) {
-      Contacts.showOverlay();
-    }
+  var load = function load(contacts) {
     var onError = function() {
       console.log('ERROR Retrieving contacts');
     }
@@ -158,8 +155,11 @@ contacts.List = (function() {
         });
       }
     }
-    //Add organization name
-    meta.innerHTML += utils.text.escapeHTML(contact.org, true);
+    // Add organization name
+    if (contact.org && contact.org.length > 0 && contact.org[0] !== '' &&
+        contact.org[0] != contact.givenName) {
+      meta.innerHTML += utils.text.escapeHTML(contact.org[0], true);
+    }
 
     //Final item structure
     link.appendChild(name);
@@ -236,7 +236,6 @@ contacts.List = (function() {
         cleanLastElements(counter);
         FixedHeader.refresh();
         imgLoader.reload();
-        Contacts.hideOverlay();
         emptyList = false;
         return;
       }
@@ -244,10 +243,6 @@ contacts.List = (function() {
       for (var i = 0; i < CHUNK_SIZE; i++) {
         var current = (index * CHUNK_SIZE) + i;
         buildContact(contacts[current], fbContacts, counter, favorites);
-      }
-
-      if (index === 0) {
-        Contacts.hideOverlay();
       }
 
       window.setTimeout(function() {
@@ -381,6 +376,8 @@ contacts.List = (function() {
     var container = document.getElementById(group);
     var newContact = renderContact(c);
     container.appendChild(newContact);
+
+    imgLoader.reload();
   }
 
   var getContactsByGroup = function gCtByGroup(errorCb, contacts) {
@@ -443,6 +440,16 @@ contacts.List = (function() {
       sortBy: sortBy,
       sortOrder: 'ascending'
     };
+
+    // We use an empty string here for now because the WebContacts API
+    // is really performing a "startswith" instead of "contains".
+    // We should look at implementing a "nonempty" filter in the future.
+    if (ActivityHandler.activityDataType === 'webcontacts/email') {
+      options.filterBy = ['email'];
+      options.filterOp = 'contains';
+      options.filterValue = '';
+    }
+
     var request = navigator.mozContacts.find(options);
     request.onsuccess = function findCallback() {
       successCb(request.result);
@@ -492,7 +499,9 @@ contacts.List = (function() {
   // Fills the contact data to display if no givenName and familyName
   var refillContactData = function refillContactData(contact) {
     if (!contact.givenName && !contact.familyName) {
-      if (contact.tel && contact.tel.length > 0) {
+      if (contact.org && contact.org.length > 0) {
+        contact.givenName = contact.org;
+      } else if (contact.tel && contact.tel.length > 0) {
         contact.givenName = contact.tel[0].value;
       } else if (contact.email && contact.email.length > 0) {
         contact.givenName = contact.email[0].value;
@@ -532,10 +541,12 @@ contacts.List = (function() {
 
   var hideGroup = function hideGroup(group) {
     groupsList.querySelector('#group-' + group).classList.add('hide');
+    FixedHeader.refresh();
   }
 
   var showGroup = function showGroup(group) {
     groupsList.querySelector('#group-' + group).classList.remove('hide');
+    FixedHeader.refresh();
   }
 
   var remove = function remove(id) {
@@ -574,6 +585,7 @@ contacts.List = (function() {
 
     ret.push(first);
     ret.push(second);
+    ret.push(contact.org);
     ret.push(contact.tel && contact.tel.length > 0 ?
       contact.tel[0].value : '');
     ret.push(contact.email && contact.email.length > 0 ?

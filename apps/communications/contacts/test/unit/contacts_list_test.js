@@ -85,6 +85,7 @@ suite('Render contacts list', function() {
       searchBox,
       noResults,
       settings,
+      searchSection,
       noContacts;
 
   function assertNoGroup(title, container) {
@@ -180,9 +181,18 @@ suite('Render contacts list', function() {
     document.body.appendChild(settings);
     document.body.appendChild(noContacts);
 
-    var searchSection = document.createElement('section');
+    searchSection = document.createElement('section');
     searchSection.id = 'search-view';
-    searchSection.innerHTML = '<input type="text" id="search-contact"/>';
+    searchSection.innerHTML = '<form id="searchview-container" class="search" role="search">' +
+          '<button id="cancel-search" data-l10n-id="cancel" type="submit">Cancel</button>' +
+          '<p>' +
+            '<label for="search-contact">' +
+              '<input type="search" name="search" class="textfield" placeholder="Search"' +
+                     'id="search-contact" data-l10n-id="search-contact">' +
+              '<button type="reset">Clear</button>' +
+            '</label>' +
+          '</p>' +
+        '</form>';
     searchSection.innerHTML += '<section id="groups-list-search">';
     searchSection.innerHTML += '<ol id="search-list" data-type="list"></ol>';
     searchSection.innerHTML += '</section>';
@@ -272,7 +282,7 @@ suite('Render contacts list', function() {
       assertNoGroup(groupFav, containerFav);
       assertGroup(groupA, containerA, 1);
       assertGroup(groupB, containerB, 1);
-      assertGroup(groupB, containerC, 1);
+      assertGroup(groupC, containerC, 1);
       assertNoGroup(groupD, containerD);
 
     });
@@ -309,13 +319,33 @@ suite('Render contacts list', function() {
       assertTotal(3, 4);
     });
 
-    test('rendering one with no name and phone', function() {
+    test('rendering one with no name nor phone and company', function() {
       var newContact = new MockContactAllFields();
       newContact.id = '4';
       newContact.familyName = null;
       newContact.givenName = null;
       newContact.name = null;
       newContact.category = null;
+      newContact.org = 'AD';
+      var newList = mockContacts.concat([newContact]);
+      subject.load(newList);
+      assert.isTrue(noContacts.classList.contains('hide'));
+      assertNoGroup(groupFav, containerFav);
+      var cContacts = assertGroup(groupC, containerC, 1);
+      assert.isTrue(cContacts[0].innerHTML.indexOf('CC') > -1);
+      var aContacts = assertGroup(groupA, containerA, 2);
+      assert.isTrue(aContacts[0].innerHTML.indexOf('AD') > -1);
+      assertTotal(3, 4);
+    });
+
+    test('rendering one with no name nor company and phone', function() {
+      var newContact = new MockContactAllFields();
+      newContact.id = '4';
+      newContact.familyName = null;
+      newContact.givenName = null;
+      newContact.name = null;
+      newContact.category = null;
+      newContact.org = null;
       var newList = mockContacts.concat([newContact]);
       subject.load(newList);
       assert.isTrue(noContacts.classList.contains('hide'));
@@ -328,7 +358,7 @@ suite('Render contacts list', function() {
       assertTotal(4, 4);
     });
 
-    test('rendering one with no name and email', function() {
+    test('rendering one with no name nor company and email', function() {
       var newContact = new MockContactAllFields();
       newContact.id = '4';
       newContact.familyName = null;
@@ -336,6 +366,7 @@ suite('Render contacts list', function() {
       newContact.name = null;
       newContact.category = null;
       newContact.tel = null;
+      newContact.org = null;
       newContact.email[0].value = 'CZ@CZ.com';
       var newList = mockContacts.concat([newContact]);
       subject.load(newList);
@@ -348,7 +379,7 @@ suite('Render contacts list', function() {
       assertTotal(3, 4);
     });
 
-    test('rendering one with no name nor email', function() {
+    test('rendering one with no name nor email nor company', function() {
       var newContact = new MockContactAllFields();
       newContact.id = '4';
       newContact.familyName = null;
@@ -356,6 +387,7 @@ suite('Render contacts list', function() {
       newContact.name = null;
       newContact.category = null;
       newContact.tel = null;
+      newContact.org = null;
       newContact.email = null;
       var newList = mockContacts.concat([newContact]);
       subject.load(newList);
@@ -368,7 +400,7 @@ suite('Render contacts list', function() {
       assertTotal(4, 4);
     });
 
-    test('rendering one with no name nor email and favorite', function() {
+    test('rendering one with no name nor email nor company and favorite', function() {
       var newContact = new MockContactAllFields();
       newContact.id = '4';
       newContact.familyName = null;
@@ -376,6 +408,7 @@ suite('Render contacts list', function() {
       newContact.name = null;
       newContact.category = ['favorite'];
       newContact.tel = null;
+      newContact.org = null;
       newContact.email = null;
       var newList = mockContacts.concat([newContact]);
       subject.load(newList);
@@ -656,7 +689,7 @@ suite('Render contacts list', function() {
 
     });
 
-    test('Search  by name and surname with trailing whitespaces', function() {
+    test('Search  by name and surname with trailing whitespaces', function(done) {
       mockContacts = new MockContactsList();
       var contactIndex = Math.floor(Math.random() * mockContacts.length);
       var contact = mockContacts[contactIndex];
@@ -673,17 +706,14 @@ suite('Render contacts list', function() {
   });
 
   suite('Contacts order', function() {
-    suiteSetup(function() {
+    test('Order by lastname', function() {
+      resetDom(document);
+      subject.init(list);
+
       mockContacts = new MockContactsList();
       subject.load(mockContacts);
-    });
-
-    suiteTeardown(function() {
-      subject.setOrderByLastName(true);
-    });
-
-    test('Order by lastname', function() {
       var names = document.querySelectorAll('[data-search]');
+      
       assert.length(names, mockContacts.length);
       for (var i = 0; i < names.length; i++) {
         var printed = names[i];
@@ -715,6 +745,8 @@ suite('Render contacts list', function() {
            window.utils.text.escapeHTML(mockContact.givenName[0], true) + '</strong> ' +
            window.utils.text.escapeHTML(mockContact.familyName[0], true);
       assert.equal(name.innerHTML.indexOf(highlight), 0);
+
+      subject.setOrderByLastName(true);
     });
   });
 });

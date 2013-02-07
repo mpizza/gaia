@@ -25,18 +25,18 @@ class TestContacts(GaiaTestCase):
     _hangup_bar_locator = ('id', 'callbar-hang-up-action')
     _call_app_locator = ('css selector', "iframe[name='call_screen']")
 
-
     def setUp(self):
         GaiaTestCase.setUp(self)
+
+        # Seed the contact with the remote phone number so we don't call random people
+        self.contact = MockContact(tel={
+            'type': 'Mobile',
+            'value': "%s" % self.testvars['remote_phone_number']})
+        self.data_layer.insert_contact(self.contact)
 
         # launch the Contacts app
         self.app = self.apps.launch('Contacts')
         self.wait_for_element_not_displayed(*self._loading_overlay)
-
-        # Seed the contact with the remote phone number so we don't call random people
-        self.contact = MockContact(tel={'type':'Mobile','value':"%s" % self.testvars['remote_phone_number']})
-        self.data_layer.insert_contact(self.contact)
-        self.marionette.refresh()
 
     def create_contact_locator(self, contact):
         return ('xpath', "//a[descendant::strong[text()='%s']]" % contact)
@@ -44,14 +44,17 @@ class TestContacts(GaiaTestCase):
     def test_call_contact(self):
         # NB This is not a listed smoke test
         # Call phone from a contact
+        # https://moztrap.mozilla.org/manage/case/5679/
 
         contact_locator = self.create_contact_locator(self.contact['givenName'])
         self.wait_for_element_displayed(*contact_locator)
 
-        self.marionette.find_element(*contact_locator).click()
+        contact_listing = self.marionette.find_element(*contact_locator)
+        self.marionette.tap(contact_listing)
 
         self.wait_for_element_displayed(*self._call_phone_number_button_locator)
-        self.marionette.find_element(*self._call_phone_number_button_locator).click()
+        call_phone_number_button = self.marionette.find_element(*self._call_phone_number_button_locator)
+        self.marionette.tap(call_phone_number_button)
 
         # Switch to top level frame
         self.marionette.switch_to_frame()
@@ -67,19 +70,8 @@ class TestContacts(GaiaTestCase):
         # Check the number displayed is the one we dialed
         # TODO if this step fails bug 817291 may have been fixed
         self.assertIn(self.contact['tel']['value'],
-            self.marionette.find_element(*self._calling_number_locator).text)
+                      self.marionette.find_element(*self._calling_number_locator).text)
 
         # hang up before the person answers ;)
-        self.marionette.find_element(*self._hangup_bar_locator).click()
-
-
-    def tearDown(self):
-
-        if hasattr(self, 'contact'):
-            # Have to switch back to Contacts frame to remove the contact
-            self.marionette.switch_to_frame()
-            self.marionette.switch_to_frame(self.app.frame_id)
-            self.data_layer.remove_contact(self.contact)
-
-        # close all apps
-        self.apps.kill_all()
+        hangup_bar = self.marionette.find_element(*self._hangup_bar_locator)
+        self.marionette.tap(hangup_bar)

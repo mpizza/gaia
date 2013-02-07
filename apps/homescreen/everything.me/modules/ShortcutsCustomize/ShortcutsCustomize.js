@@ -7,7 +7,6 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
         elParent = options.elParent;
         
         elList = Evme.$create('select', {'multiple': "multiple", 'id': "shortcuts-select"});
-        elList.addEventListener('change', done);
         elList.addEventListener('blur', onHide);
         
         elParent.appendChild(elList);
@@ -27,16 +26,19 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
     };
     
     this.get = function get() {
-        var shortcuts = [],
+        var selectedShortcuts = [],
             elShourtcuts = Evme.$('option', elList);
         
-        for (var i=0, elOption=elShourtcuts[i]; elOption; elOption=elShourtcuts[++i]) {
+        for (var i=0, elOption; elOption=elShourtcuts[i++];) {
             if (elOption.selected) {
-                shortcuts.push(elOption.value);
+                selectedShortcuts.push({
+                    "query": elOption.value,
+                    "experienceId": elOption.dataset.experience || ''
+                });
             }
         }
         
-        return shortcuts;
+        return selectedShortcuts;
     };
     
     this.load = function load(data) {
@@ -49,16 +51,34 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
     };
     
     this.add = function add(shortcuts) {
-        var html = '';
+        var html = '',
+            shortcutsAdded = {};
         
-        for (var query in shortcuts) {
-            html += '<option value="' + query.replace(/"/g, '&quot;') + '"';
+        for (var i=0,shortcut,query,queryKey,experienceId,name; shortcut=shortcuts[i++];) {
+            query = shortcut.query;
+            queryKey = query.toLowerCase();
+            experienceId = shortcut.experienceId || '';
+            name = query;
             
-            if (shortcuts[query]) {
-                html += ' selected="selected"';
+            if (experienceId) {
+                var l10nkey = 'id-' + Evme.Utils.shortcutIdToKey(experienceId),
+                    translatedName = Evme.Utils.l10n('shortcut', l10nkey);
+                
+                if (translatedName) {
+                    name = translatedName;
+                }
             }
             
-            html += '>' + query.replace(/</g, '&lt;') + '</option>';
+            name = name.replace(/</g, '&lt;');
+            
+            if (!shortcutsAdded[queryKey]) {
+                html += '<option ' +
+                            'value="' + query.replace(/"/g, '&quot;') + '" ' +
+                            'data-experience="' + experienceId + '"' +
+                        '>' + name + '</option>';
+                
+                shortcutsAdded[queryKey] = true;
+            }
         }
         
         elList.innerHTML = html;
@@ -66,13 +86,20 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
     
     this.Loading = new function Loading() {
         var active = false,
-            ID = 'shortcuts-customize-loading',
-            TEXT_CANCEL = "Cancel";
+            ID = 'shortcuts-customize-loading';
         
         this.show = function loadingShow() {
             if (active) return;
             
-            var el = Evme.$create('div', {'id': ID}, '<menu><button>' + TEXT_CANCEL + '</button></menu>');
+            var el = Evme.$create('div',
+                        {'id': ID},
+                        '<b ' + Evme.Utils.l10nAttr(NAME, 'loading') + '></b>' +
+                        '<div class="loading-wrapper">' +
+                            '<progress class="loading-icon small"></progress>' +
+                        '</div>' +
+                        '<menu>' +
+                            '<button ' + Evme.Utils.l10nAttr(NAME, 'loading-cancel') + '></button>' +
+                        '</menu>');
                       
             Evme.$("button", el, function onItem(elButton) {
                 elButton.addEventListener("click", onLoadingCancel)
@@ -97,6 +124,8 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
     
     function onHide() {
         Evme.EventHandler.trigger(NAME, 'hide');
+        
+        done();
     }
     
     function onLoadingCancel(e) {
@@ -106,10 +135,8 @@ Evme.ShortcutsCustomize = new function Evme_ShortcutsCustomize() {
     }
     
     function done() {
-        var shortcuts = self.get();
-        
         Evme.EventHandler.trigger(NAME, 'done', {
-            'shortcuts': shortcuts,
+            'shortcuts': self.get(),
             'icons': savedIcons
         });
     }

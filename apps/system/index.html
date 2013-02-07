@@ -13,6 +13,8 @@
     <script defer src="shared/js/custom_dialog.js"></script>
     <script defer src="shared/js/notification_helper.js"></script>
     <script defer src="shared/js/async_storage.js"></script>
+    <script defer src="shared/js/mobile_operator.js"></script>
+    <script defer src="shared/js/manifest_helper.js"></script>
 
     <!-- Wrapper -->
     <link rel="stylesheet" type="text/css" href="style/wrapper/wrapper.css">
@@ -32,7 +34,8 @@
 
     <!-- Include shared resources
     <link rel="resource" type="application/json" href="shared/resources/apn.json"/>
-    <link rel="resource" type="image/png" href="shared/resources/branding/"/>
+    <link rel="resource" type="image/png" href="shared/resources/branding/initlogo.png"/>
+    <link rel="resource" type="image/png" href="shared/resources/branding/splash_screen_generic.png"/>
     -->
 
     <!-- applications.js must not be deferred
@@ -52,10 +55,6 @@
     <script defer src="js/system_dialog.js"></script>
     <script defer src="js/icc_cache.js"></script>
 
-    <!-- Battery Manager -->
-    <link rel="stylesheet" type="text/css" href="style/battery_manager/battery_manager.css">
-    <script defer src="js/battery_manager.js"></script>
-
     <!-- Grid View -->
     <link rel="stylesheet" type="text/css" href="style/gridview/gridview.css">
     <script defer src="js/gridview.js"></script>
@@ -72,9 +71,9 @@
     <link rel="stylesheet" type="text/css" href="style/sleep_menu/sleep_menu.css">
     <script defer src="js/sleep_menu.js"></script>
 
-    <!-- Cards View -->
-    <link rel="stylesheet" type="text/css" href="style/cards_view/cards_view.css">
-    <script defer src="js/cards_view/cards_view.js"></script>
+    <!-- Battery Manager -->
+    <link rel="stylesheet" type="text/css" href="style/battery_manager/battery_manager.css">
+    <script defer src="js/battery_manager.js"></script>
 
     <!-- Keyboard -->
     <script defer src="js/keyboard_manager.js"></script>
@@ -100,7 +99,6 @@
 
     <!-- LockScreen -->
     <link rel="stylesheet" type="text/css" href="style/lockscreen/lockscreen.css">
-    <script defer src="js/mobile_info.js"></script>
     <script defer src="js/lockscreen.js"></script>
 
     <!-- PIN Unlocking -->
@@ -203,10 +201,20 @@
     <link rel="stylesheet" type="text/css" href="style/crash_reporter/crash_reporter.css">
     <script defer src="js/crash_reporter.js"></script>
 
+    <!-- Captive Portal Login -->
+    <script defer src="js/captive_portal.js"></script>
+
     <!-- Windows -->
     <!-- Any module that wants to intercept the Home button and prevent the -->
     <!-- homescreen from being displayed must come before this script. -->
+    <script defer src="js/window.js"></script>
     <script defer src="js/window_manager.js"></script>
+
+    <!-- Remote Debugger -->
+    <script defer src="js/remote_debugger.js"></script>
+
+    <!-- Call Forwarding  -->
+    <script defer src="js/call_forwarding.js"></script>
 
     <!-- z-indexes of all the overlays in the system -->
     <link rel="stylesheet" type="text/css" href="style/zindex.css">
@@ -259,11 +267,7 @@
         <div id="statusbar-flight-mode" class="sb-icon sb-icon-flight-mode" hidden></div>
         <div id="statusbar-signal" class="sb-icon sb-icon-signal"
           data-level="5" hidden></div>
-        <div id="statusbar-network-activity" class="sb-icon sb-icon-network-activity" hidden></div>
         <div id="statusbar-headphones" class="sb-icon sb-icon-headphones" hidden></div>
-        <div id="statusbar-system-downloads"
-             class="sb-icon sb-icon-system-downloads"
-             hidden></div>
 
         <!-- Permissions -->
         <div id="statusbar-tethering" class="sb-icon sb-icon-tethering" hidden></div>
@@ -275,6 +279,10 @@
         <div id="statusbar-geolocation" class="sb-icon sb-icon-geolocation" hidden></div>
         <div id="statusbar-usb" class="sb-icon sb-icon-usb" hidden></div>
         <div id="statusbar-call-forwarding" class="sb-icon sb-icon-call-forwarding" hidden></div>
+
+        <!-- Activity -->
+        <canvas id="statusbar-system-downloads" width="16" height="16" hidden></canvas>
+        <canvas id="statusbar-network-activity" width="16" height="16" hidden></canvas>
       </div>
 
       <div id="utility-tray" data-z-index-level="utility-tray">
@@ -311,9 +319,13 @@
         <!-- quick settings -->
         <div id="quick-settings">
           <a href="#" id="quick-settings-wifi" data-enabled="false"></a>
+          <div class="separator"></div>
           <a href="#" id="quick-settings-data" data-enabled="false"></a>
+          <div class="separator"></div>
           <a href="#" id="quick-settings-bluetooth" data-enabled="false"></a>
-          <a href="#" id="quick-settings-power-save" data-enabled="false"></a>
+          <div class="separator"></div>
+          <a href="#" id="quick-settings-airplane-mode" data-enabled="false"></a>
+          <div class="separator"></div>
           <a href="#" id="quick-settings-full-app" data-enabled="false"></a>
         </div>
 
@@ -372,6 +384,14 @@
                   <input name="simpukVis" type="text" size="8" maxlength="8" />
                 </div>
               </div>
+              <!-- sim nck input field -->
+              <div id="nckArea" hidden>
+                <div data-l10n-id="nckCode">NCK Code</div>
+                <div class="input-wrapper">
+                  <input name="nckpin" type="number" size="16" maxlength="16" />
+                  <input name="nckpinVis" type="text" size="16" maxlength="16" />
+                </div>
+              </div>
               <!-- new sim pin input field -->
               <div id="newPinArea" hidden>
                 <div data-l10n-id="newSimPinMsg">
@@ -408,7 +428,7 @@
             </section>
             <menu>
               <button id="dont-send-report" disabled="true" data-l10n-id="crash-dont-send">Don't Send</button>
-              <button id="send-report" class="recommend" data-l10n-id="crash-send">Send Report</button>
+              <button id="send-report" class="recommend" data-l10n-id="crash-end">Send Report</button>
             </menu>
           </form>
 
@@ -700,27 +720,49 @@
       </form>
 
       <form id="updates-download-dialog" data-type="confirm" role="dialog"
-            data-z-index-level="updates-download-dialog">
+            data-z-index-level="updates-download-dialog" data-nowifi="false" 
+            data-data-connection-inline-warning="false">
         <section>
           <h1>
             Updates
           </h1>
           <ul>
           </ul>
-          <menu>
-            <button id="updates-later-button" type="reset"
-                    data-l10n-id="later">Later</button>
-            <button id="updates-download-button" type="submit"
-              data-l10n-id="download">Download</button>
-          </menu>
         </section>
+        <p id="updates-data-connection-warning" data-l10n-id="downloadDataConnectionWarning">
+          Updates are downloaded via data connection when Wi-Fi is not available. Additional data charges may apply.    
+        </p>
+        <p id="updates-offline-warning" data-l10n-id="downloadOfflineWarning">
+          Connection unavailable. Connect to a network to download updates.
+        </p>
+        <menu>
+          <button id="updates-later-button" type="reset"
+                  data-l10n-id="later">Later</button>
+          <button id="updates-download-button" type="submit"
+            data-l10n-id="download">Download</button>
+        </menu>
+      </form>
+
+      <form id="updates-viaDataConnection-dialog" data-type="confirm" role="dialog" data-z-index-level="updates-viaDataConnection-dialog">
+        <section>
+          <h1 data-l10n-id="downloadUpdatesViaDataConnection">
+            Download updates via data connection?
+          </h1>
+          <p data-l10n-id="downloadUpdatesViaDataConnectionMessage">
+            Updates are downloaded via data connection when Wi-Fi is not available. When using data connection, phone calls may be blocked and additional charges may also apply.
+          </p>
+        </section>
+        <menu>
+          <button id="updates-viaDataConnection-notnow-button" type="reset" data-l10n-id="notNow">Not Now</button>
+          <button id="updates-viaDataConnection-download-button" type="submit" data-l10n-id="download">Download</button>
+        </menu>
       </form>
 
       <div id="lockscreen-camera" data-z-index-level="lockscreen-camera"></div>
 
       <div id="lockscreen" class="uninit" data-panel="main" data-z-index-level="lockscreen">
         <div id="lockscreen-container">
-          <div id="lockscreen-panel-main" class="lockscreen-panel">
+          <div id="lockscreen-panel-main" class="lockscreen-panel" data-wallpaper>
             <div id="lockscreen-header">
               <div id="lockscreen-connstate" hidden><span></span><span></span></div>
               <div id="lockscreen-mute" hidden></div>
@@ -748,7 +790,7 @@
             </div>
           </div>
 
-          <div id="lockscreen-panel-passcode" class="lockscreen-panel">
+          <div id="lockscreen-panel-passcode" class="lockscreen-panel" data-wallpaper>
             <h2 id="lockscreen-passcode-status" data-l10n-id="enter-security-code">Enter Security&nbsp;Code</h2>
             <p id="lockscreen-passcode-code"><span></span><span></span><span></span><span></span></p>
             <div id="lockscreen-passcode-pad">
@@ -822,9 +864,7 @@
       <div id="system-overlay" data-z-index-level="system-overlay">
         <div id="battery">
           <span class="icon-battery"></span>
-          <span class="battery-notification empty" data-l10n-id="battery-almost-empty">Battery almost empty</span>
-          <span class="battery-notification small" data-l10n-id="battery-low">Battery low</span>
-          <span class="battery-notification full" data-l10n-id="battery-full">Battery 100% charged</span>
+          <span class="battery-notification" data-l10n-id="battery-almost-empty">Battery almost empty</span>
         </div>
 
         <div id="volume" class="vibration">

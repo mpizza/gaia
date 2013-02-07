@@ -27,22 +27,15 @@ class TestCalculator(GaiaTestCase):
         self.wait_for_element_displayed(*self._clear_button_locator)
 
         # clear the calculator's display
-        self.marionette.find_element(*self._clear_button_locator).click()
+        clear_button = self.marionette.find_element(*self._clear_button_locator)
+        self.marionette.tap(clear_button)
 
         # perform a 3*5 calculation
-        self.marionette.find_element(*self._three_button_locator).click()
-        self.marionette.find_element(*self._multiply_button_locator).click()
-        self.marionette.find_element(*self._five_button_locator).click()
-        self.marionette.find_element(*self._equals_button_locator).click()
+        self.marionette.tap(*self._three_button_locator)
+        self.marionette.tap(*self._multiply_button_locator)
+        self.marionette.tap(*self._five_button_locator)
+        self.marionette.tap(*self._equals_button_locator)
 
         # verify the result
         display = self.marionette.find_element(*self._display_locator)
         self.assertEquals(display.text, '15', 'wrong calculated value!')
-
-    def tearDown(self):
-
-        # close the app
-        if hasattr(self, 'app'):
-            self.apps.kill(self.app)
-
-        GaiaTestCase.tearDown(self)

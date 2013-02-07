@@ -6,6 +6,83 @@
 var MailAPI = null;
 
 var App = {
+  initialized: false,
+
+  loader: {
+    _loaded: {},
+
+    js: function(file, cb) {
+      var script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = file;
+      if (cb) script.onload = cb;
+      document.querySelector('head').appendChild(script);
+    },
+
+    style: function(file, cb) {
+      var script = document.createElement('link');
+      script.type = 'text/css';
+      script.rel = 'stylesheet';
+      script.href = file;
+      document.querySelector('head').appendChild(script);
+      cb();
+    },
+
+    /**
+     * Loads all resources passed to it
+     * Calls the callback when all resources are loaded
+     * The DOM injection is handled by one of the methods in this object.
+     * This is determined by the first resource segment, E.g., js/, style/...
+     */
+    load: function() {
+      var self = this;
+      var ops = arguments.length-1;
+      var callback = arguments[arguments.length-1];
+
+      function loadedCallback(resource) {
+        return function() {
+          self._loaded[resource] = true;
+          ops--;
+          done();
+        }
+      }
+
+      for (var i = 0; i < arguments.length-1;  i++) {
+        var resource = arguments[i];
+        if (!this._loaded[resource]) {
+          this[resource.split('/')[0]](resource, loadedCallback(resource));
+        } else {
+          ops--;
+          done();
+        }
+      }
+
+      function done() {
+        if (ops > 0)
+          return;
+        callback();
+      }
+    },
+
+    /**
+     * Preloads all remaining resources
+     */
+    preloadAll: function(cb) {
+      cb = cb || function() {};
+
+      App.loader.load(
+        'style/value_selector.css',
+        'style/compose-cards.css',
+        'style/setup-cards.css',
+        'js/value_selector.js',
+        'js/iframe-shims.js',
+        'js/setup-cards.js',
+        'js/compose-cards.js',
+        cb
+      );
+    }
+  },
+
   /**
    * Bind any global notifications, relay localizations to the back-end.
    */
@@ -48,11 +125,12 @@ var App = {
         sent: mozL10n.get('folder-sent'),
         drafts: mozL10n.get('folder-drafts'),
         trash: mozL10n.get('folder-trash'),
-        queue: mozL10n.get('folder-unsent'),
+        queue: mozL10n.get('folder-queue'),
         junk: mozL10n.get('folder-junk'),
-        archives: mozL10n.get('archives')
+        archives: mozL10n.get('folder-archives')
       }
     });
+    this.initialized = true;
   },
 
   /**
@@ -112,44 +190,19 @@ var App = {
         }
         Cards.assertNoCards();
         Cards.pushCard(
-          'setup-pick-service', 'default', 'immediate',
+          'setup-account-info', 'default', 'immediate',
           {
             allowBack: false
           });
       }
+
+      // Preload all resources after 2s
+      setTimeout(function preloadTimeout() {
+        App.loader.preloadAll();
+      }, 2000);
     };
   }
 };
-
-function hookStartup() {
-  var gotLocalized = false, gotMailAPI = false;
-  function doInit() {
-    try {
-      populateTemplateNodes();
-      Cards._init();
-      App._init();
-      App.showMessageViewOrSetup();
-    }
-    catch (ex) {
-      console.error('Problem initializing', ex, '\n', ex.stack);
-    }
-  }
-
-  window.addEventListener('localized', function() {
-    console.log('got localized!');
-    gotLocalized = true;
-    if (gotMailAPI)
-      doInit();
-  }, false);
-  window.addEventListener('mailapi', function(event) {
-    console.log('got MailAPI!');
-    MailAPI = event.mailAPI;
-    gotMailAPI = true;
-    if (gotLocalized)
-      doInit();
-  }, false);
-}
-hookStartup();
 
 var queryURI = function _queryURI(uri) {
   function addressesToArray(addresses) {
@@ -193,18 +246,58 @@ var queryURI = function _queryURI(uri) {
 
 };
 
+function hookStartup() {
+  var gotLocalized = (mozL10n.readyState === 'interactive') ||
+                     (mozL10n.readystate === 'complete'),
+      gotMailAPI = false;
+  function doInit() {
+    try {
+      populateTemplateNodes();
+      Cards._init();
+      App._init();
+      App.showMessageViewOrSetup();
+    }
+    catch (ex) {
+      console.error('Problem initializing', ex, '\n', ex.stack);
+    }
+  }
+
+  if (!gotLocalized) {
+    window.addEventListener('localized', function localized() {
+      console.log('got localized!');
+      gotLocalized = true;
+      window.removeEventListener('localized', localized);
+      if (gotMailAPI)
+        doInit();
+    });
+  }
+  window.addEventListener('mailapi', function(event) {
+    console.log('got MailAPI!');
+    MailAPI = event.mailAPI;
+    gotMailAPI = true;
+    if (gotLocalized)
+      doInit();
+  }, false);
+}
+hookStartup();
+
 var activityCallback = null;
 if ('mozSetMessageHandler' in window.navigator) {
   window.navigator.mozSetMessageHandler('activity',
                                         function actHandle(activity) {
     var activityName = activity.source.name;
+    // To assist in bug analysis, log the start of the activity here.
+    console.log('activity!', activityName);
     if (activityName === 'share') {
       var attachmentBlobs = activity.source.data.blobs,
           attachmentNames = activity.source.data.filenames;
-    } else if (activityName === 'new') {
-      var [to, subject, body, cc, bcc] = queryURI(activity.source.data.URI);
-      if (!to)
-        return;
+    }
+    else if (activityName === 'new' ||
+             activityName === 'view') {
+      // new uses URI, view uses url
+      var [to, subject, body, cc, bcc] = queryURI(
+        activity.source.data.url ||
+        activity.source.data.URI);
     }
     var sendMail = function actHandleMail() {
       var folderToUse;
@@ -212,18 +305,16 @@ if ('mozSetMessageHandler' in window.navigator) {
         folderToUse = Cards._cardStack[Cards
           ._findCard(['folder-picker', 'navigation'])].cardImpl.curFolder;
       } catch (e) {
+        console.log('no navigation found:', e);
         var req = confirm(mozL10n.get('setup-empty-account-prompt'));
-        // TODO: Since we can not switch back to previous app if activity type
-        //       is "window", both buttons in confirm dialog will enter
-        //       setup page now(or caller app need to control launch by itself).
-        //
         if (!req) {
-          // TODO: Since dialog is not working under inline mode, we disable the
-          //       postError now or it will switch back to previous app every
-          //       time while no account.
-
-          // activity.postError('cancelled');
-          // return false;
+          // We want to do the right thing, but currently this won't even dump
+          // us in the home-screen app.  This is because our activity has
+          // disposition: window rather than inline.
+          activity.postError('cancelled');
+          // So our workaround is to close our window.
+          window.close();
+          return false;
         }
         return true;
       }
@@ -236,8 +327,8 @@ if ('mozSetMessageHandler' in window.navigator) {
             composer.to = to;
           if (subject)
             composer.subject = subject;
-          if (body)
-            composer.body = body;
+          if (body && typeof body === 'string')
+            composer.body = { text: body };
           if (cc)
             composer.cc = cc;
           if (bcc)
@@ -252,16 +343,20 @@ if ('mozSetMessageHandler' in window.navigator) {
           }
           Cards.pushCard('compose',
             'default', 'immediate', { composer: composer,
-            activity: (activityName == 'share' ? activity : null) });
+            activity: activity });
           activityLock = false;
         });
     };
 
-    if (document.readyState == 'complete') {
+    if (App.initialized) {
+      console.log('activity', activityName, 'triggering compose now');
       sendMail();
     } else {
+      console.log('activity', activityName, 'waiting for callback');
       activityCallback = sendMail;
     }
-
   });
+}
+else {
+  console.warn('Activity support disabled!');
 }

@@ -25,8 +25,8 @@ html, body {
   right: 0;
   bottom: 0;
   overflow-x: auto;
-  background: url(images/bgtop.png) top left no-repeat,
-              url(images/bgbottom.png) bottom left no-repeat,
+  background: url(images/bg_top.png) top left no-repeat,
+              url(images/bg_bottom.png) bottom left no-repeat,
               url(images/bg_1px.png) repeat-y;
   background-size: 100% auto;
 }
@@ -53,18 +53,22 @@ html, body {
 
 [role=navigation] {
   white-space: nowrap;
-  margin: 0px;
+  margin: 0;
   padding: 1.5rem;
   border-top: 1px solid #a6a6a6;
   background: rgba(0,0,0,0.05);
   display: block;
   overflow: hidden;
   position: absolute;
-  left: 0px;
-  right: 0px;
-  bottom: 0px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 3;
   height: 3.5rem;
+}
+
+#nav-bar {
+  z-index: 1;
 }
 
 [role=navigation] button {
@@ -73,7 +77,6 @@ html, body {
   margin-right: 1rem;
   position: relative;
   text-align: right;
-  text-transform: capitalize;
 }
 
 [role=navigation] .recommend {
@@ -95,7 +98,7 @@ html, body {
   background: url(images/next.png) no-repeat center center;
 }
 
-[role=navigation] #join {
+[role=navigation] #wifi-join-button {
   display:none;
 }
 
@@ -111,7 +114,7 @@ html, body {
   display: none;
 }
 
-[role=navigation].secondary-menu #join {
+[role=navigation].secondary-menu #wifi-join-button {
   display: block;
 }
 
@@ -131,22 +134,26 @@ html, body {
   border-top: solid 0.1rem #b7b7b7;
   border-bottom: solid 0.1rem #fff;
   position: absolute;
-  top: 6.5rem;
+  top: 5.5rem;
   left: 1.5rem;
   right: 1.5rem;
   z-index: 100;
 }
 
- .step-state:before {
+.step-state:before {
   content: "";
-  width: calc(100% / 6);
-  height: 0.6rem;
+  height: 0.3rem;
+  width: calc(100% / 7);
   position: absolute;
   top: 50%;
   left: 0;
-  margin-top: -0.3rem;
-  background: #00a5c6;
+  margin-top: -0.2rem;
+  background: #858585;
   transition: all 0.35s cubic-bezier(0.000, 1.000, 0.535, 1.110);
+}
+
+.less-steps.step-state:before {
+  width: calc(100% / 6) !important;
 }
 
 /* STATES */
@@ -174,6 +181,10 @@ html, body {
   transform: translateX(500%);
 }
 
+.step-7.step-state:before {
+  transform: translateX(600%);
+}
+
 /*
   Header conditional button
 */
@@ -186,7 +197,7 @@ html, body {
   Splash screen
 */
 
-#splash {
+#splash-screen {
   opacity: 0;
   z-index: 3000;
   transition: all 1s ease;
@@ -194,58 +205,72 @@ html, body {
   background-size: 100% auto;
 }
 
-#splash.show {
+#splash-screen.show {
   opacity: 1;
 }
 /*
   Pin code screen
 */
+#unlock-sim-screen {
+  z-index: 2000;
+}
 
-#pincode .pin_container {
+#unlock-sim-screen .unlock_container {
   height: calc(100% - 10rem);
 }
 
-#pincode section header {
+#unlock-sim-screen section label {
   padding: 1.5rem 3rem 0.5rem 3rem;
   color: black;
   font-size: 1.5rem;
+  width: auto;
+  height: 2rem;
 }
 
-#pincode .input-wrapper {
+#unlock-sim-screen .input-wrapper {
   padding: 0 1.5rem;
   position: relative;
 }
 
-#pincode #pin_error {
+#unlock-sim-screen .info {
+  font-size: 1.5rem;
+  padding: 1rem 1.5rem;
+}
+
+#unlock-sim-screen .error {
   padding: 1rem 2rem;
   font-size: 1.5rem;
   color: red;
 }
 
-#pincode #sim-pin.onerror {
-  border-color: red;
+#unlock-sim-screen .onerror {
+  border: 0.1rem solid red;
 }
 
-#pincode .input-wrapper input {
+#unlock-sim-screen .input-wrapper input {
   font-size: 2rem;
   padding-left: 1.5rem;
-  pointer-events: none;
 }
 
-#pincode #fake-sim-pin {
+#unlock-sim-screen .fake-input {
   margin-top: -4rem;
   opacity: 0;
-  pointer-events: auto;
+
 }
 
-#pincode input[type="number"] {
+#unlock-sim-screen input[type="number"] {
     -moz-box-sizing: border-box;
     display: block;
     overflow: hidden;
     width: 100%;
     height: 4rem;
     resize: none;
-    padding: 0px 0.8rem;
+    padding: 0 0.8rem;
+    pointer-events: auto;
+}
+
+#unlock-sim-screen input[type="password"] {
+  pointer-events: none;
 }
 
 /*
@@ -253,7 +278,7 @@ html, body {
 */
 
 #languages [data-type="list"] {
-  background: url(images/bgbubbles.png) 0 -4.5rem no-repeat;
+  background: url(images/bg_bubbles.png) 0 -4.5rem no-repeat;
   background-size: 100% auto;
   padding-top: 14rem;
 }
@@ -277,77 +302,93 @@ html, body {
   display: block;
   padding: 1.5rem 1.5rem 0.5rem 1.5rem ;
   font-size: 1.5rem;
-  text-transform: capitalize;
 }
 
 #configure_network_params form input {
   padding-left: 1.5rem;
 }
 
-.hidden {
+/* The hide class is needed by the custom_dialog.js library */
+.hidden, .hide {
   display: none !important;
 }
 
+/* 'show password' checkboxes */
+#configure_network_params label:not([for]){
+  display: inline-block;
+  width: auto;
+  height: auto;
+}
+#configure_network_params label span {
+  top: 2rem;
+  left: 3rem;
+}
+#configure_network_params label p {
+  width: auto;
+  float: right;
+  bottom: 0.4rem;
+  left: 3rem;
+}
 
 /*
   Finish process
 */
 
-#finish, #tutorialFinish {
+#finish-screen, #tutorialFinish {
   opacity: 0;
   z-index: 3010;
   transition: all 1s ease;
   background: #3b4547;
 }
 
-#finish.show, #tutorialFinish.show {
+#finish-screen.show, #tutorialFinish.show {
   opacity: 1;
 }
 
-#finish h1, #tutorialFinish h1 {
+#finish-screen h1, #tutorialFinish h1 {
   margin: 0;
   color: white;
-  font-size: 4.1rem;
+  font-size: 3rem;
   padding: 4rem 0 0 0;
   font-weight: 200;
   line-height: 4rem;
 }
 
-#finish h2, #tutorialFinish h2 {
+#finish-screen h2, #tutorialFinish h2 {
   margin: 0;
   color: white;
-  font-size: 1.8rem;
+  font-size: 1.9rem;
   padding: .5rem 0 2rem 0;
   font-weight: 200;
   line-height: 2rem;
 }
 
-#finish p, #tutorialFinish p {
+#finish-screen p, #tutorialFinish p {
   margin: 0;
   color: white;
   font-size: 1.4rem;
   font-weight: normal;
 }
 
-#finish .content {
+#finish-screen .content {
   background: url(images/icon_tour.png) no-repeat center 95%;
 }
 
 #tutorialFinish .content {
-  background: url(images/thumb-up.png) no-repeat center 70%;
+  background: url(images/thumb_up.png) no-repeat center 70%;
 }
 
-#finish .content, #tutorialFinish .content {
+#finish-screen .content, #tutorialFinish .content {
   height: calc(100% - 6rem);
   padding: 0 3rem;
   width: calc(100% - 6rem);
 }
 
-#finish [role=navigation],#tutorialFinish [role=navigation] {
+#finish-screen [role=navigation],#tutorialFinish [role=navigation] {
   border-top: .1rem solid #697476;
 }
 
-#finish [role=navigation] button,#tutorialFinish [role=navigation] button {
+#finish-screen [role=navigation] button,#tutorialFinish [role=navigation] button {
   text-align: center;
 }
 
@@ -371,49 +412,50 @@ html, body {
   margin-top: 0.5rem;
 }
 
-#time_zone_overlay.UTC0000 { background-image: url('images/timezone/+0.png'); }
-#time_zone_overlay.UTC0100 { background-image: url('images/timezone/+1.png'); }
-#time_zone_overlay.UTC0200 { background-image: url('images/timezone/+2.png'); }
-#time_zone_overlay.UTC0300 { background-image: url('images/timezone/+3.png'); }
-#time_zone_overlay.UTC0330 { }
-#time_zone_overlay.UTC0400 { background-image: url('images/timezone/+4.png'); }
-#time_zone_overlay.UTC0430 { }
-#time_zone_overlay.UTC0500 { background-image: url('images/timezone/+5.png'); }
-#time_zone_overlay.UTC0530 { }
-#time_zone_overlay.UTC0545 { }
-#time_zone_overlay.UTC0600 { background-image: url('images/timezone/+6.png'); }
-#time_zone_overlay.UTC0630 { }
-#time_zone_overlay.UTC0700 { background-image: url('images/timezone/+7.png'); }
-#time_zone_overlay.UTC0800 { background-image: url('images/timezone/+8.png'); }
-#time_zone_overlay.UTC0845 { }
-#time_zone_overlay.UTC0900 { background-image: url('images/timezone/+9.png'); }
-#time_zone_overlay.UTC0930 { }
-#time_zone_overlay.UTC1000 { background-image: url('images/timezone/+10.png'); }
-#time_zone_overlay.UTC1030 { }
-#time_zone_overlay.UTC1100 { background-image: url('images/timezone/+11.png'); }
-#time_zone_overlay.UTC1130 { }
-#time_zone_overlay.UTC1200 { background-image: url('images/timezone/+12.png'); }
-#time_zone_overlay.UTC1245 { }
-#time_zone_overlay.UTC1300 { }
-#time_zone_overlay.UTC1400 { }
+#time_zone_overlay.UTC0000 { background-image: url('images/timezone/+0000.png'); }
+#time_zone_overlay.UTC0100 { background-image: url('images/timezone/+0100.png'); }
+#time_zone_overlay.UTC0200 { background-image: url('images/timezone/+0200.png'); }
+#time_zone_overlay.UTC0300 { background-image: url('images/timezone/+0300.png'); }
+#time_zone_overlay.UTC0330 { background-image: url('images/timezone/+0330.png'); }
+#time_zone_overlay.UTC0400 { background-image: url('images/timezone/+0400.png'); }
+#time_zone_overlay.UTC0430 { background-image: url('images/timezone/+0430.png'); }
+#time_zone_overlay.UTC0500 { background-image: url('images/timezone/+0500.png'); }
+#time_zone_overlay.UTC0530 { background-image: url('images/timezone/+0530.png'); }
+#time_zone_overlay.UTC0545 { background-image: url('images/timezone/+0545.png'); }
+#time_zone_overlay.UTC0600 { background-image: url('images/timezone/+0600.png'); }
+#time_zone_overlay.UTC0630 { background-image: url('images/timezone/+0630.png'); }
+#time_zone_overlay.UTC0700 { background-image: url('images/timezone/+0700.png'); }
+#time_zone_overlay.UTC0800 { background-image: url('images/timezone/+0800.png'); }
+#time_zone_overlay.UTC0845 { background-image: url('images/timezone/+0845.png'); }
+#time_zone_overlay.UTC0900 { background-image: url('images/timezone/+0900.png'); }
+#time_zone_overlay.UTC0930 { background-image: url('images/timezone/+0930.png'); }
+#time_zone_overlay.UTC1000 { background-image: url('images/timezone/+1000.png'); }
+#time_zone_overlay.UTC1030 { background-image: url('images/timezone/+1030.png'); }
+#time_zone_overlay.UTC1100 { background-image: url('images/timezone/+1100.png'); }
+#time_zone_overlay.UTC1130 { background-image: url('images/timezone/+1130.png'); }
+#time_zone_overlay.UTC1200 { background-image: url('images/timezone/+1200.png'); }
+#time_zone_overlay.UTC1245 { background-image: url('images/timezone/+1245.png'); }
+#time_zone_overlay.UTC1300 { background-image: url('images/timezone/+1300.png'); }
+#time_zone_overlay.UTC1400 { background-image: url('images/timezone/+1400.png'); }
 
-#time_zone_overlay.UTC-0100 { background-image: url('images/timezone/-1.png'); }
-#time_zone_overlay.UTC-0200 { background-image: url('images/timezone/-2.png'); }
-#time_zone_overlay.UTC-0300 { background-image: url('images/timezone/-3.png'); }
-#time_zone_overlay.UTC-0330 { }
-#time_zone_overlay.UTC-0400 { background-image: url('images/timezone/-4.png'); }
-#time_zone_overlay.UTC-0430 { }
-#time_zone_overlay.UTC-0500 { background-image: url('images/timezone/-5.png'); }
-#time_zone_overlay.UTC-0600 { background-image: url('images/timezone/-6.png'); }
-#time_zone_overlay.UTC-0700 { background-image: url('images/timezone/-7.png'); }
-#time_zone_overlay.UTC-0800 { background-image: url('images/timezone/-8.png'); }
-#time_zone_overlay.UTC-0900 { }
-#time_zone_overlay.UTC-0930 { }
-#time_zone_overlay.UTC-1000 { }
-#time_zone_overlay.UTC-1100 { }
+#time_zone_overlay.UTC-0100 { background-image: url('images/timezone/-0100.png'); }
+#time_zone_overlay.UTC-0200 { background-image: url('images/timezone/-0200.png'); }
+#time_zone_overlay.UTC-0300 { background-image: url('images/timezone/-0300.png'); }
+#time_zone_overlay.UTC-0330 { background-image: url('images/timezone/-0330.png'); }
+#time_zone_overlay.UTC-0400 { background-image: url('images/timezone/-0400.png'); }
+#time_zone_overlay.UTC-0430 { background-image: url('images/timezone/-0430.png'); }
+#time_zone_overlay.UTC-0500 { background-image: url('images/timezone/-0500.png'); }
+#time_zone_overlay.UTC-0600 { background-image: url('images/timezone/-0600.png'); }
+#time_zone_overlay.UTC-0700 { background-image: url('images/timezone/-0700.png'); }
+#time_zone_overlay.UTC-0800 { background-image: url('images/timezone/-0800.png'); }
+#time_zone_overlay.UTC-0900 { background-image: url('images/timezone/-0900.png'); }
+#time_zone_overlay.UTC-0930 { background-image: url('images/timezone/-0930.png'); }
+#time_zone_overlay.UTC-1000 { background-image: url('images/timezone/-1000.png'); }
+#time_zone_overlay.UTC-1100 { background-image: url('images/timezone/-1100.png'); }
+#time_zone_overlay.UTC-1200 { background-image: url('images/timezone/-1200.png'); }
 
 #time_zone_map {
-  background-image: url('images/map.png') ;
+  background-image: url('images/timezone/map.png') ;
   background-position: bottom;
   background-repeat: no-repeat;
   position: relative;
@@ -481,11 +523,82 @@ html, body {
 #import_contacts li {
   padding: 0 3.5rem;
 }
+
+#import_contacts li.importOption {
+  padding: 0 !important;
+  height: auto !important;
+  border-bottom: none;
+}
+
+#import_contacts #fb_import, #import_contacts #fb_after_import2 {
+  margin-top: 1rem;
+}
+
+/* Needed due to the .icon class which is overriding this property */
+#import_contacts button:active {
+  background-color: #008aaa !important;
+}
+
+#no-sim, #no-network, #fb_after_import2 p {
+  color: #5B5B5B;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  margin: -0.2rem 0 0.6rem;
+  padding: 0;
+  white-space: normal;
+}
+
+
+#import_contacts ul:first-child li:last-child {
+  margin-bottom: 0;
+}
+
+/* Extending icon types*/
+#import_contacts [data-type="list"] li button.icon-fb:before {
+  background-image: url('images/import_fb.png');
+}
+
+/* Extending icon types*/
+#import_contacts [data-type="list"] li button.icon-sim:before {
+  background-image: url(/contacts/style/images/import_SIM.png);
+  background-size: 1.6rem;
+}
+
+#import_contacts li button.icon {
+  padding-left: 3rem;
+  text-indent: 1rem;
+}
+
+#import_contacts li button.icon:before {
+  right: auto;
+  left: 0.5rem;
+}
+
+#import_contacts article:first-child ul {
+  margin-top: 1.6rem;
+}
+
+
+#fb_after_import1 {
+  background: url('images/import_fb.png') center left no-repeat;
+}
+
+#statusMsg.ftu {
+  bottom: 6.5rem;
+  z-index: 0;
+  opacity: 0;
+}
+
+#statusMsg.ftu.bannerStart {
+  z-index: 2;
+  opacity: 1;
+}
+
+
 #wifi li {
   padding: 0 1.5rem;
 }
 
-#import_contacts li:after,
 #wifi li:after {
   content: "";
   transition: opacity 0.2s ease;
@@ -499,35 +612,8 @@ html, body {
   z-index: 0;
 }
 
-#import_contacts li:active:after,
 #wifi li:active:after {
   opacity: 0.6;
-}
-
-#import_contacts li.disabled {
-  pointer-events: none;
-}
-
-#import_contacts li.disabled p{
-    pointer-events: none;
-}
-
-#import_contacts li.disabled:after {
-  content: "";
-  background-color: #e6e6e6;
-  opacity: 0.7;
-}
-
-#import_contacts ul:first-child li:last-child {
-  margin-bottom: 0;
-}
-
-#sim_import {
-  background: url('images/import_sim.png') center left no-repeat;
-}
-
-#fb_import {
-  background: url('images/import_fb.png') center left no-repeat;
 }
 
 /*
@@ -609,20 +695,11 @@ html, body {
   padding: 1.5rem 3rem 0 3rem;
   width: calc(100% - 6rem);
   height: calc(100% - 3.5rem);
+  margin-top: 2rem;
 }
 
 #browser_privacy img {
   vertical-align: middle;
-}
-
-#browser_privacy .logo_container {
-  margin: 1rem 0 2.5rem 0;
-}
-
-#browser_privacy .logo_title {
-  font-size: 1.8rem;
-  margin-left: 1rem;
-  font-weight: 500;
 }
 
 #browser_privacy p {
@@ -632,6 +709,7 @@ html, body {
   font-size: 1.35rem;
   line-height: 1.8rem;
 }
+
 
 #browser_privacy p a {
   margin-left: 0.3rem;
@@ -732,11 +810,17 @@ i.hack-first-child {
   background-image: -moz-image-rect(url(/shared/resources/branding/privacy_sprite.png), 0, 96, 32, 64);
 }
 
-/* no connection error dialog */
+#newsletter-form.hidden,
+#newsletter-success-screen,
+#invalid-email-error-dialog,
+#offline-newsletter-error-dialog,
 #offline-error-dialog {
   display: none;
 }
 
+#newsletter-success-screen.visible,
+#invalid-email-error-dialog.visible,
+#offline-newsletter-error-dialog.visible,
 #offline-error-dialog.visible {
   display: block;
 }
@@ -853,6 +937,7 @@ i.hack-first-child {
   background-image: -moz-image-rect(url(images/wifi_sprite.png), 0, 160, 32, 128) !important;
 }
 
+
 .icon {
   background-color: transparent !important;
   background-repeat: no-repeat !important;
@@ -880,7 +965,7 @@ i.hack-first-child {
 }
 
 [data-type="list"] aside {
-  margin: 0px 0.5rem 0px 0px !important;
+  margin: 0 0.5rem 0 0 !important;
 }
 
 
@@ -888,36 +973,34 @@ i.hack-first-child {
   Tutorial
 */
 
-#tutorial [role=main] > [role=region] {
+#tutorial-screen [role=main] > [role=region] {
   background-color: #474747;
   color: white;
 }
 
-#tutorial [role=main] {
+#tutorial-screen [role=main] {
   top: 0;
   bottom: 0;
 }
 
-#tutorial header {
+#tutorial-screen header {
   height: 5rem;
   font-size: 1.4rem;
   padding: 3rem 1.5rem 1rem 1.5rem;
   text-align: left;
 }
 
-#tutorial section {
+#tutorial-screen section {
   text-align: center;
 }
 
 /* Tutorial Steps state */
-#tutorial .step-state {
+#tutorial-screen .step-state {
   border-bottom: none;
   top: 1.5rem;
 }
 
-#tutorial .step-state:before {
+#tutorial-screen .step-state:before {
   width: calc(100% / 5);
-  height: 0.3rem;
-  margin-top: -0.2rem;
   background: #FFFFFF;
 }

@@ -37,7 +37,7 @@ var Tutorial = {
   },
   get tutorialScreen() {
     delete this.tutorialScreen;
-    return this.tutorialScreen = document.getElementById('tutorial');
+    return this.tutorialScreen = document.getElementById('tutorial-screen');
   },
   get tutorialFinish() {
     delete this.tutorialFinish;
@@ -54,6 +54,7 @@ var Tutorial = {
 
     this.tutorialFinish.addEventListener('click', function ftuEnd() {
       self.tutorialFinish.removeEventListener('click', ftuEnd);
+      WifiManager.finish();
       window.close();
     });
     window.addEventListener('hashchange', this);

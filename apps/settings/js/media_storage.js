@@ -11,7 +11,6 @@
  * In this case, the user has to unplug the USB cable in order to actually turn
  * off UMS, and we put some text to that effect on the settings screen.
  */
-
 var MediaStorage = {
   init: function mediaStorage_init() {
     this.deviceStorage = navigator.getDeviceStorage('pictures');
@@ -28,16 +27,15 @@ var MediaStorage = {
   initUI: function mediaStorage_initUI() {
     this.umsEnabledCheckBox = document.querySelector('[name="ums.enabled"]');
     this.umsEnabledInfoBlock = document.getElementById('ums-desc');
-    if (!this.umsEnabledCheckBox || !this.umsEnabledInfoBlock) {
+    if (!this.umsEnabledCheckBox || !this.umsEnabledInfoBlock)
       return;
-    }
 
     // The normal handling of the checkboxes in the settings is done through a
     // 'change' event listener in settings.js
     this.umsEnabledCheckBox.onchange = function umsEnabledChanged() {
       MediaStorage.updateInfo();
     };
-
+    stackedBar.init('space-stackedbar');
     this.updateInfo();
   },
 
@@ -81,27 +79,28 @@ var MediaStorage = {
   updateInfo: function mediaStorage_updateInfo() {
     var self = this;
 
-    var statreq = this.deviceStorage.stat();
-    statreq.onsuccess = function mediaStorage_statSuccess(evt) {
-      var state = evt.target.result.state;
+    var availreq = this.deviceStorage.available();
+    availreq.onsuccess = function mediaStorage_availSuccess(evt) {
+      var _ = navigator.mozL10n.get;
+      var state = evt.target.result;
 
-      // show/hide the 'Unplug USB cable to disable' message when available
-      if (self.umsEnabledInfoBlock) {
-        if ((state === 'shared') && !self.umsEnabledCheckBox.checked) {
-          self.umsEnabledInfoBlock.style.display = 'block';
-        } else {
-          self.umsEnabledInfoBlock.style.display = 'none';
-        }
+      var infoBlock = self.umsEnabledInfoBlock;
+      if (infoBlock) {
+         if (self.umsEnabledCheckBox.checked) {
+           infoBlock.textContent = _('enabled');
+         } else if (state === 'shared') {
+           infoBlock.textContent = _('umsUnplugToDisable');
+         } else {
+           infoBlock.textContent = _('disabled');
+         }
       }
 
       var mediaSubtitle = document.getElementById('media-storage-desc');
-      var _ = navigator.mozL10n.get;
-
       switch (state) {
         case 'shared':
           mediaSubtitle.textContent = '';
-          // Keep the media storage enabled, so that the user go inside to
-          // toggle USB Mass storage
+          // Keep the media storage enabled,
+          // so that the user goes inside to toggle USB Mass storage.
           self.setEnabledState(true);
           self.setInfoInvalid();
           break;
@@ -152,40 +151,93 @@ var MediaStorage = {
       if (!element)
         return;
 
-      if (!l10nId) {
-        l10nId = 'size-';
+      if (size === undefined || isNaN(size)) {
+        element.textContent = '';
+        return;
       }
 
       // KB - 3 KB (nearest ones), MB, GB - 1.2 MB (nearest tenth)
       var fixedDigits = (size < 1024 * 1024) ? 0 : 1;
       var sizeInfo = FileSizeFormatter.getReadableFileSize(size, fixedDigits);
 
-      element.textContent = _(l10nId + sizeInfo.unit, { size: sizeInfo.size });
+      element.textContent = _(l10nId || 'storageSize', {
+        size: sizeInfo.size,
+        unit: _('byteUnit-' + sizeInfo.unit)
+      });
     }
-
+    
     // Update the storage details
-    DeviceStorageHelper.getStat('music', function(size) {
-      var element = document.getElementById('music-space');
-      formatSize(element, size);
-    });
-
-    DeviceStorageHelper.getStat('pictures', function(size) {
-      var element = document.getElementById('pictures-space');
-      formatSize(element, size);
-    });
-
-    DeviceStorageHelper.getStat('videos', function(size, freeSize) {
-      var element = document.getElementById('videos-space');
-      formatSize(element, size);
-
-      element = document.getElementById('media-free-space');
-      formatSize(element, freeSize);
-
+    stackedBar.reset();
+    
+    DeviceStorageHelper.getStats(['music', 'pictures', 'videos'], function(sizes) {
+      var element = document.querySelector('#music-space .size');
+      formatSize(element, sizes['music']);
+      stackedBar.add(new StackBarItem('music', sizes['music']));
+      element = document.querySelector('#pictures-space .size');
+      formatSize(element, sizes['pictures']);
+      stackedBar.add(new StackBarItem('pictures', sizes['pictures']));
+      element = document.querySelector('#videos-space .size');
+      formatSize(element, sizes['videos']);
+      stackedBar.add(new StackBarItem('videos', sizes['videos']));
+      element = document.querySelector('#media-free-space .size');
+      formatSize(element, sizes['music']);
+      stackedBar.add(new StackBarItem('free', sizes['free']));
       element = document.getElementById('media-storage-desc');
-      formatSize(element, freeSize, 'available-size-');
+      formatSize(element, sizes['free'], 'availableSize');
+      stackedBar.refreshUI();
     });
   }
 };
 
-MediaStorage.init();
+function StackBarItem(id, value) {
 
+  this.id = id;
+
+  this.value = value;
+
+}
+
+var stackedBar = {
+  
+  _targetId: null,
+  
+  _items: [],
+  
+  _total: 0,
+  
+  _initUI: function sb_initui(targetId) {
+    this._targetId = targetId
+  },
+  
+  init: function sb_init(targetId) {
+    this._initUI(targetId);
+  },
+  
+  add: function sb_add(item) {
+    this._total = this._total + item.value;
+    this._items.push(item);
+  },
+  
+  refreshUI: function sb_refreshUI() {
+    var container = document.getElementById(this._targetId);
+    if(!container)
+      return;
+    for (var i = 0; i < this._items.length; i++) {
+      var item = document.getElementById('stackedbar-item-' + this._items[i].id);
+      if(!item)
+        item = document.createElement('span');
+      item.className = 'stackedbar-item';
+      item.id = 'stackedbar-item-' + this._items[i].id;
+      item.style.width = (this._items[i].value * 100) / this._total + '%';
+      container.appendChild(item);
+    }
+  },
+  
+  reset: function sb_reset() {
+    this._items = [];
+    this._total = 0;
+  }
+  
+}
+
+navigator.mozL10n.ready(MediaStorage.init.bind(MediaStorage));

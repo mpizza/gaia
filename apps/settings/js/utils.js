@@ -22,6 +22,16 @@ function debug(msg, optObject) {
 }
 
 /**
+ * Move settings to foreground
+ */
+function reopenSettings() {
+  navigator.mozApps.getSelf().onsuccess = function getSelfCB(evt) {
+    var app = evt.target.result;
+    app.launch('settings');
+  };
+}
+
+/**
  * Open a link with a web activity
  */
 
@@ -46,7 +56,7 @@ function openLink(url) {
  */
 
 function openDialog(dialogID, onSubmit, onReset) {
-  if('#' + dialogID == document.location.hash)
+  if ('#' + dialogID == document.location.hash)
     return;
 
   var origin = document.location.hash;
@@ -87,7 +97,8 @@ function audioPreview(element, type) {
             element.querySelector('input').value;
   audio.src = url;
   if (source === audio.src && playing) {
-    audio.stop();
+    audio.pause();
+    audio.src = '';
   } else {
     audio.play();
   }
@@ -135,15 +146,39 @@ var DeviceStorageHelper = (function DeviceStorageHelper() {
       console.error('Cannot get DeviceStorage for: ' + type);
       return;
     }
-
-    var request = deviceStorage.stat();
-    request.onsuccess = function(e) {
-      var totalSize = e.target.result.totalBytes;
-      callback(e.target.result.totalBytes, e.target.result.freeBytes);
+    deviceStorage.freeSpace().onsuccess = function(e) {
+      var freeSpace = e.target.result;
+      deviceStorage.usedSpace().onsuccess = function(e) {
+        var usedSpace = e.target.result;
+        callback(usedSpace, freeSpace, type);
+      };
     };
   }
 
-  return { getStat: getStat };
+  function getStats(types, callback) {
+    var results = {};
+
+    var current = types.length;
+
+    for (var i = 0; i < types.length; i++) {
+      getStat(types[i], function(totalBytes, freeBytes, type) {
+
+        results[type] = totalBytes;
+        results['free'] = freeBytes;
+        current--;
+        if(current == 0)
+          callback(results);
+          
+      });
+    }
+
+  }
+
+  return {
+    getStat: getStat,
+    getStats: getStats
+  };
+
 })();
 
 /**
@@ -258,23 +293,10 @@ function bug344618_polyfill() {
   };
 
   // apply to all input[type="range"] elements
-  var ranges = document.querySelectorAll('label > input[type="range"]');
+  var selector = 'label:not(.bug344618_polyfill) > input[type="range"]';
+  var ranges = document.querySelectorAll(selector);
   for (var i = 0; i < ranges.length; i++) {
     polyfill(ranges[i]);
-  }
-}
-
-/**
- * Fire a callback when as soon as all l10n resources are ready and the UI has
- * been translated.
- * Note: this could be exposed as `navigator.mozL10n.onload'...
- */
-
-function onLocalized(callback) {
-  if (navigator.mozL10n.readyState == 'complete') {
-    callback();
-  } else {
-    window.addEventListener('localized', callback);
   }
 }
 

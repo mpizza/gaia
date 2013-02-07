@@ -12,6 +12,7 @@
   ],
   "permissions": {
     "alarms":{},
+    "audio-channel-notification":{},
     "contacts":{ "access": "readcreate" },
     "desktop-notification":{},
     "device-storage:music":{ "access": "readcreate" },
@@ -57,6 +58,12 @@
        },          
       "disposition": "window",
       "returnValue": true
+    },
+    "view": {
+      "filters": {
+        "type": "url",
+        "url": { "required":true, "regexp":"/^mailto:/" }
+      }
     }
   },
   "orientation": "portrait-primary"

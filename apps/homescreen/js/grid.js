@@ -8,8 +8,8 @@ const GridManager = (function() {
   var container;
 
   var windowWidth = window.innerWidth;
-  var thresholdForPanning = window.innerWidth / 4;
-  var thresholdForTapping = 10;
+  var panningThreshold = window.innerWidth / 4;
+  var tapThreshold = Page.prototype.tapThreshold;
 
   var dragging = false;
 
@@ -18,7 +18,7 @@ const GridManager = (function() {
   var overlay, overlayStyle;
   var overlayTransition = 'opacity ' + kPageTransitionDuration + 'ms ease';
 
-  var numberOfSpecialPages = 0;
+  var numberOfSpecialPages = 0, landingPage, prevLandingPage, nextLandingPage;
   var pages = [];
   var currentPage = 1;
 
@@ -32,38 +32,44 @@ const GridManager = (function() {
     right: 0
   };
 
-  var startEvent, isPanning = false;
+  var startEvent, isPanning = false, deltaX, removePanHandler,
+      dummy = function() {};
+
+  var isTouch = 'ontouchstart' in window;
+  var touchstart = isTouch ? 'touchstart' : 'mousedown';
+  var touchmove = isTouch ? 'touchmove' : 'mousemove';
+  var touchend = isTouch ? 'touchend' : 'mouseup';
+
+  var getX = (function getXWrapper() {
+    return isTouch ? function(e) { return e.touches[0].pageX } :
+                     function(e) { return e.pageX };
+  })();
 
   function handleEvent(evt) {
     switch (evt.type) {
-      case 'mousedown':
+      case touchstart:
         touchStartTimestamp = evt.timeStamp;
-        evt.stopPropagation();
-        startEvent = evt;
+        startEvent = isTouch ? evt.touches[0] : evt;
+        deltaX = 0;
         attachEvents();
+        removePanHandler = dummy;
+        isPanning = false;
         break;
 
-      case 'mousemove':
-        evt.stopPropagation();
+      case touchmove:
+        // Start panning immediately but only disable
+        // the tap when we've moved far enough.
+        deltaX = getX(evt) - startEvent.pageX;
+        if (deltaX === 0)
+          return;
 
-        // Starts panning only when tapping does not make sense
-        // anymore. The pan will then start from this point to avoid
-        // a jump effect.
-        var deltaX = evt.clientX - startEvent.clientX;
-        if (!isPanning) {
-          if (Math.abs(deltaX) < thresholdForTapping) {
-            return;
-          } else {
-            isPanning = true;
-            document.body.dataset.transitioning = 'true';
-          }
-        }
+        document.body.dataset.transitioning = 'true';
 
         // Panning time! Stop listening here to enter into a dedicated
         // method for panning only the 2 relevants pages based on the
         // direction of the inputs. The code here is carefully written
         // to avoid as much as possible allocations while panning.
-        window.removeEventListener('mousemove', handleEvent);
+        window.removeEventListener(touchmove, handleEvent);
 
         // Before panning pages that are directly next to the current
         // target are set visible.
@@ -83,7 +89,7 @@ const GridManager = (function() {
         next.MozTransform = 'translateX(' + windowWidth + 'px)';
 
         var translate = 'translateX($px)';
-        var startX = startEvent.clientX;
+        var startX = startEvent.pageX;
         var forward = deltaX > 0;
 
         var refresh;
@@ -129,55 +135,68 @@ const GridManager = (function() {
           };
         }
 
+        // We should move the pages with the first touchmove event
+        window.mozRequestAnimationFrame(refresh);
+
         // Generate a function accordingly to the current page position.
         if (Homescreen.isInEditMode() || currentPage > 2) {
           var pan = function(e) {
-            deltaX = e.clientX - startX;
+            deltaX = getX(e) - startX;
+            if (!isPanning && Math.abs(deltaX) >= tapThreshold) {
+              isPanning = true;
+            }
             window.mozRequestAnimationFrame(refresh);
           };
         } else {
           var pan = function(e) {
-            deltaX = e.clientX - startX;
+            deltaX = getX(e) - startX;
+            if (!isPanning && Math.abs(deltaX) >= tapThreshold) {
+              isPanning = true;
+            }
             window.mozRequestAnimationFrame(refresh);
             window.mozRequestAnimationFrame(function() {
               setOverlayPanning(index, deltaX, forward);
             });
-          }
+          };
         }
 
         var container = pages[index].container;
-        container.setCapture(true);
-        container.addEventListener('mousemove', pan, true);
+        container.addEventListener(touchmove, pan, true);
 
-        window.addEventListener('mouseup', function removePanHandler(e) {
-          touchEndTimestamp = e.timeStamp;
-          window.removeEventListener('mouseup', removePanHandler, true);
+        removePanHandler = function removePanHandler(e) {
+          touchEndTimestamp = e ? e.timeStamp : Number.MAX_VALUE;
+          window.removeEventListener(touchend, removePanHandler, true);
 
-          container.removeEventListener('mousemove', pan, true);
-          document.releaseCapture();
+          container.removeEventListener(touchmove, pan, true);
 
           window.mozRequestAnimationFrame(function panTouchEnd() {
-            onTouchEnd(deltaX);
+            onTouchEnd(deltaX, e);
           });
-        }, true);
+        };
+
+        window.addEventListener(touchend, removePanHandler, true);
+        window.removeEventListener(touchend, handleEvent);
+
         break;
 
-      case 'mouseup':
-        evt.stopPropagation();
+      case touchend:
         releaseEvents();
-        if (!isPanning) {
-          pageHelper.getCurrent().tap(evt.target);
-        }
-        isPanning = false;
+        pageHelper.getCurrent().tap(evt.target);
         break;
 
       case 'contextmenu':
-        if (currentPage > 1 && 'isIcon' in evt.target.dataset) {
+        if (isPanning) {
           evt.stopImmediatePropagation();
+          return;
+        }
+
+        if (currentPage > landingPage && 'isIcon' in evt.target.dataset) {
+          evt.stopImmediatePropagation();
+          removePanHandler();
           Homescreen.setMode('edit');
           DragDropManager.start(evt, {
-            'x': startEvent.clientX,
-            'y': startEvent.clientY
+            'x': startEvent.pageX,
+            'y': startEvent.pageY
           });
         }
 
@@ -186,45 +205,51 @@ const GridManager = (function() {
   }
 
   function setOverlayPanning(index, deltaX, forward) {
-    if (index === 1) {
-      overlayStyle.opacity = (Math.abs(deltaX) / windowWidth) * opacityOnAppGridPageMax;
-    } else if (index === 0 && !forward || index === 2 && forward) {
-      overlayStyle.opacity = opacityOnAppGridPageMax - (Math.abs(deltaX) / windowWidth)
-                              * opacityOnAppGridPageMax;
+    if (index === landingPage && landingPage > 0) {
+      overlayStyle.opacity = (Math.abs(deltaX) / windowWidth) *
+                              opacityOnAppGridPageMax;
+    } else if (index === prevLandingPage && !forward ||
+               index === nextLandingPage && forward) {
+      overlayStyle.opacity = opacityOnAppGridPageMax -
+                     (Math.abs(deltaX) / windowWidth) * opacityOnAppGridPageMax;
     }
   }
 
   function applyEffectOverlay(index) {
     overlayStyle.MozTransition = overlayTransition;
-    overlayStyle.opacity = index === 1 ? 0 : opacityOnAppGridPageMax;
+    overlayStyle.opacity = index === landingPage ?
+                           prevLandingPage : opacityOnAppGridPageMax;
   }
 
-  function onTouchEnd(deltaX) {
+  function onTouchEnd(deltaX, evt) {
     var page = currentPage;
-    /* Bigger than threshold for panning or a fast movement bigger than
-       threshold for tapping */
-    if (Math.abs(deltaX) > thresholdForPanning ||
+    /* Bigger than panning threshold or fast gesture */
+    if (Math.abs(deltaX) > panningThreshold ||
         touchEndTimestamp - touchStartTimestamp < kPageTransitionDuration) {
       var forward = dirCtrl.goesForward(deltaX);
       if (forward && currentPage < pages.length - 1) {
         page = page + 1;
       } else if (!forward &&
-                  (page === 1 || page >= 3 ||
-                    (page === 2 && !Homescreen.isInEditMode()))) {
+                 (page === landingPage || page >= nextLandingPage + 1 ||
+                    (page === nextLandingPage && !Homescreen.isInEditMode()))) {
         page = page - 1;
       }
+    } else if (!isPanning && evt) {
+      releaseEvents();
+      pageHelper.getCurrent().tap(evt.target);
     }
+
     goToPage(page);
   }
 
   function attachEvents() {
-    window.addEventListener('mousemove', handleEvent);
-    window.addEventListener('mouseup', handleEvent);
+    window.addEventListener(touchmove, handleEvent);
+    window.addEventListener(touchend, handleEvent);
   }
 
   function releaseEvents() {
-    window.removeEventListener('mousemove', handleEvent);
-    window.removeEventListener('mouseup', handleEvent);
+    window.removeEventListener(touchmove, handleEvent);
+    window.removeEventListener(touchend, handleEvent);
   }
 
   function togglePagesVisibility(start, end) {
@@ -243,7 +268,7 @@ const GridManager = (function() {
   var lastGoingPageTimestamp = 0;
 
   function goToPage(index, callback) {
-    document.location.hash = (index == 1 ? 'root' : '');
+    document.location.hash = (index === landingPage ? 'root' : '');
     if (index < 0 || index >= pages.length)
       return;
 
@@ -251,19 +276,21 @@ const GridManager = (function() {
                 kPageTransitionDuration;
     lastGoingPageTimestamp += delay;
     var duration = delay < kPageTransitionDuration ?
-                   delay : kPageTransitionDuration
+                   delay : kPageTransitionDuration;
 
-    var goToPageCallback = function() {
+    var goToPageCallback = function(dispatchEvents) {
       delete document.body.dataset.transitioning;
       if (callback) {
         callback();
       }
 
-      previousPage.container.dispatchEvent(new CustomEvent('gridpagehideend'));
-      newPage.container.dispatchEvent(new CustomEvent('gridpageshowend'));
+      if (dispatchEvents) {
+        previousPage.container.dispatchEvent(new CustomEvent('gridpagehideend'));
+        newPage.container.dispatchEvent(new CustomEvent('gridpageshowend'));
+      }
       overlayStyle.MozTransition = '';
       togglePagesVisibility(index, index);
-    }
+    };
 
     var previousPage = pages[currentPage];
     var newPage = pages[index];
@@ -279,15 +306,39 @@ const GridManager = (function() {
     }
     applyEffectOverlay(index);
 
-    togglePagesVisibility(start, end);
-
     currentPage = index;
     updatePaginationBar();
 
-    if (previousPage == newPage) {
-      goToPageCallback();
+    if (previousPage === newPage) {
+      var borderingPagesToBeTranslated = false;
+
+      if (index > 0 && pages[index - 1].container.style.display === 'block') {
+        // Previous one displayed
+        pages[index - 1].moveByWithEffect(-windowWidth, duration);
+        borderingPagesToBeTranslated = true;
+      }
+
       newPage.moveByWithEffect(0, duration);
+
+      if (index < pages.length - 1 &&
+          pages[index + 1].container.style.display === 'block') {
+        // Next one displayed
+        pages[index + 1].moveByWithEffect(windowWidth, duration);
+        borderingPagesToBeTranslated = true;
+      }
+
+      if (borderingPagesToBeTranslated) {
+        container.addEventListener('transitionend', function transitionEnd(e) {
+          container.removeEventListener('transitionend', transitionEnd);
+          goToPageCallback();
+        });
+      } else {
+        goToPageCallback();
+      }
+
       return;
+    } else {
+      togglePagesVisibility(start, end);
     }
 
     // Force a reflow otherwise the newPage appears immediately because it is
@@ -301,7 +352,7 @@ const GridManager = (function() {
 
     container.addEventListener('transitionend', function transitionEnd(e) {
       container.removeEventListener('transitionend', transitionEnd);
-      goToPageCallback();
+      goToPageCallback(true);
     });
   }
 
@@ -346,13 +397,15 @@ const GridManager = (function() {
     // switch RTL-sensitive methods accordingly
     setDirCtrl();
 
-    for each (var iconsForApp in appIcons) {
-      for each (var icon in iconsForApp) {
-        icon.translate();
+    for (var manifestURL in appIcons) {
+      var iconsForApp = appIcons[manifestURL];
+      for (var entryPoint in iconsForApp) {
+        iconsForApp[entryPoint].translate();
       }
     }
-    for each (var icon in bookmarkIcons) {
-      icon.translate();
+
+    for (var bookmarkURL in bookmarkIcons) {
+      bookmarkIcons[bookmarkURL].translate();
     }
 
     haveLocale = true;
@@ -491,6 +544,8 @@ const GridManager = (function() {
   var appIcons = Object.create(null);
   // Map 'origin' -> app object.
   var appsByOrigin = Object.create(null);
+  // Map 'origin' for bookmarks -> bookmark object.
+  var bookmarksByOrigin = Object.create(null);
 
   function rememberIcon(icon) {
     var descriptor = icon.descriptor;
@@ -502,7 +557,7 @@ const GridManager = (function() {
     if (!iconsForApp)
       iconsForApp = appIcons[descriptor.manifestURL] = Object.create(null);
 
-    iconsForApp[descriptor.entry_point || ""] = icon;
+    iconsForApp[descriptor.entry_point || ''] = icon;
   }
 
   function forgetIcon(icon) {
@@ -515,7 +570,7 @@ const GridManager = (function() {
     if (!iconsForApp)
       return;
 
-    delete iconsForApp[descriptor.entry_point || ""];
+    delete iconsForApp[descriptor.entry_point || ''];
   }
 
   function getIcon(descriptor) {
@@ -523,7 +578,7 @@ const GridManager = (function() {
       return bookmarkIcons[descriptor.bookmarkURL];
 
     var iconsForApp = appIcons[descriptor.manifestURL];
-    return iconsForApp && iconsForApp[descriptor.entry_point || ""];
+    return iconsForApp && iconsForApp[descriptor.entry_point || ''];
   }
 
   function getIconsForApp(app) {
@@ -559,7 +614,7 @@ const GridManager = (function() {
 
     container = document.querySelector(selector);
     container.addEventListener('contextmenu', handleEvent);
-    container.addEventListener('mousedown', handleEvent, true);
+    container.addEventListener(touchstart, handleEvent, true);
 
     limits.left = container.offsetWidth * 0.05;
     limits.right = container.offsetWidth * 0.95;
@@ -571,6 +626,9 @@ const GridManager = (function() {
     // offset between these indexes here and the ones in the DB.
     // See also pageHelper.saveAll().
     numberOfSpecialPages = container.children.length;
+    landingPage = numberOfSpecialPages - 1;
+    prevLandingPage = landingPage - 1;
+    nextLandingPage = landingPage + 1;
     for (var i = 0; i < container.children.length; i++) {
       var pageElement = container.children[i];
       var page = new Page(pageElement, null);
@@ -598,8 +656,8 @@ const GridManager = (function() {
         iconsByManifestURL[manifestURL] = appIcons[manifestURL];
       }
 
-      // Add an empty page where we drop the icons for any extra apps we discover
-      // at this stage.
+      // Add an empty page where we drop the icons for any extra apps we
+      // discover at this stage.
       pageHelper.addPage([]);
 
       var apps = event.target.result;
@@ -607,6 +665,11 @@ const GridManager = (function() {
         delete iconsByManifestURL[app.manifestURL];
         processApp(app);
       });
+
+      for (var origin in bookmarksByOrigin) {
+        appsByOrigin[origin] = bookmarksByOrigin[origin];
+      }
+      bookmarksByOrigin = null;
 
       for (var manifestURL in iconsByManifestURL) {
         var iconsForApp = iconsByManifestURL[manifestURL];
@@ -632,8 +695,10 @@ const GridManager = (function() {
       // navigator.mozApps backed app will objects will be handled
       // asynchronously and therefore at a later time.
       var app = null;
-      if (descriptor.bookmarkURL)
+      if (descriptor.bookmarkURL) {
         app = new Bookmark(descriptor);
+        bookmarksByOrigin[app.origin] = app;
+      }
 
       var icon = icons[i] = new Icon(descriptor, app);
       rememberIcon(icon);
@@ -659,7 +724,7 @@ const GridManager = (function() {
       return;
 
     var entryPoints = manifest.entry_points;
-    if (!entryPoints) {
+    if (!entryPoints || manifest.type != 'certified') {
       createOrUpdateIconForApp(app);
       return;
     }
@@ -685,13 +750,15 @@ const GridManager = (function() {
       };
       app.ondownloaderror = function ondownloaderror(event) {
         createOrUpdateIconForApp(app, entryPoint);
-      }
+      };
     }
 
     var manifest = app.manifest ? app.manifest : app.updateManifest;
     var iconsAndNameHolder = manifest;
     if (entryPoint)
       iconsAndNameHolder = manifest.entry_points[entryPoint];
+
+    iconsAndNameHolder = new ManifestHelper(iconsAndNameHolder);
 
     var descriptor = {
       bookmarkURL: app.bookmarkURL,
@@ -700,19 +767,15 @@ const GridManager = (function() {
       updateTime: app.updateTime,
       removable: app.removable,
       name: iconsAndNameHolder.name,
-      icon: bestMatchingIcon(app, iconsAndNameHolder)
+      icon: bestMatchingIcon(app, iconsAndNameHolder),
+      useAsyncPanZoom: app.useAsyncPanZoom
     };
     if (haveLocale && !app.isBookmark) {
-      var locales = iconsAndNameHolder.locales;
-      if (locales) {
-        var locale = locales[document.documentElement.lang];
-        if (locale && locale.name)
-          descriptor.localizedName = locale.name;
-      }
+      descriptor.localizedName = iconsAndNameHolder.name;
     }
 
-    // If there's an existing icon for this bookmark/app/entry point already, let
-    // it update itself.
+    // If there's an existing icon for this bookmark/app/entry point already,
+    // let it update itself.
     var existingIcon = getIcon(descriptor);
     if (existingIcon) {
       existingIcon.update(descriptor, app);
@@ -741,7 +804,7 @@ const GridManager = (function() {
   function showRestartDownloadDialog(icon) {
     var app = icon.app;
     var _ = navigator.mozL10n.get;
-    var confirm =  {
+    var confirm = {
       title: _('download'),
       callback: function onAccept() {
         app.download();
@@ -752,7 +815,7 @@ const GridManager = (function() {
         app.onprogress = function onProgress(evt) {
           app.onprogress = null;
           icon.updateAppStatus(evt.application);
-        }
+        };
         icon.showDownloading();
         ConfirmDialog.hide();
       },
@@ -765,9 +828,9 @@ const GridManager = (function() {
     };
 
     var localizedName = icon.descriptor.localizedName || icon.descriptor.name;
-    ConfirmDialog.show(_('restart-download-title'), 
-      _('restart-download-body', {'name': localizedName}), 
-      cancel, 
+    ConfirmDialog.show(_('restart-download-title'),
+      _('restart-download-body', {'name': localizedName}),
+      cancel,
       confirm);
     return;
   }
@@ -779,8 +842,9 @@ const GridManager = (function() {
         Icon.prototype.CANCELED_ICON_URL;
     }
     var icons = manifest.icons;
-    if (!icons)
-      return Icon.prototype.DEFAULT_ICON_URL;
+    if (!icons) {
+      return getDefaultIcon(app);
+    }
 
     var preferredSize = Number.MAX_VALUE;
     var max = 0;
@@ -799,8 +863,9 @@ const GridManager = (function() {
       preferredSize = max;
 
     var url = icons[preferredSize];
-    if (!url)
-      return Icon.prototype.DEFAULT_ICON_URL;
+    if (!url) {
+      return getDefaultIcon(app);
+    }
 
     // If the icon path is not an absolute URL, prepend the app's origin.
     if (url.indexOf('data:') == 0 ||
@@ -808,6 +873,13 @@ const GridManager = (function() {
         url.indexOf('http://') == 0 ||
         url.indexOf('https://') == 0)
       return url;
+
+    if (url.charAt(0) != '/') {
+      console.warn('`' + manifest.name + '` app icon is invalid. ' +
+                   'Manifest `icons` attribute should contain URLs -or- ' +
+                   'absolute paths from the origin field.');
+      return getDefaultIcon(app);
+    }
 
     if (app.origin.slice(-1) == '/')
       return app.origin.slice(0, -1) + url;
@@ -832,7 +904,8 @@ const GridManager = (function() {
         // First 'page' is the dock.
         if (pageState.index == 0) {
           var dockContainer = document.querySelector(dockSelector);
-          var dock = new Dock(dockContainer, convertDescriptorsToIcons(pageState));
+          var dock = new Dock(dockContainer,
+            convertDescriptorsToIcons(pageState));
           DockManager.init(dockContainer, dock);
           return;
         }
@@ -851,6 +924,7 @@ const GridManager = (function() {
 
     onDragStart: function gm_onDragSart() {
       releaseEvents();
+      container.removeEventListener(touchstart, handleEvent, true);
       dragging = document.body.dataset.dragging = true;
     },
 
@@ -858,6 +932,7 @@ const GridManager = (function() {
       delete document.body.dataset.dragging;
       dragging = false;
       delete document.body.dataset.transitioning;
+      container.addEventListener(touchstart, handleEvent, true);
       ensurePagesOverflow();
       removeEmptyPages();
     },
@@ -941,6 +1016,10 @@ const GridManager = (function() {
     dirCtrl: dirCtrl,
 
     pageHelper: pageHelper,
+
+    get landingPage() {
+      return landingPage;
+    },
 
     showRestartDownloadDialog: showRestartDownloadDialog
   };

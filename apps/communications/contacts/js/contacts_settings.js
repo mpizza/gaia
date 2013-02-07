@@ -8,12 +8,14 @@ var contacts = window.contacts || {};
 **/
 contacts.Settings = (function() {
 
-  var orderCheckbox,
+  var orderItem,
       orderByLastName,
       simImportLink,
       fbImportOption,
       fbImportCheck,
       fbUpdateButton,
+      fbOfflineMsg,
+      noSimMsg,
       fbTotalsMsg,
       fbPwdRenewMsg,
       fbImportedValue,
@@ -42,24 +44,20 @@ contacts.Settings = (function() {
   var updateOrderingUI = function updateOrderingUI() {
     var value = newOrderByLastName === null ? orderByLastName :
       newOrderByLastName;
-    orderCheckbox.checked = value;
-  };
-
-  var cleanMessage = function cleanMessage() {
-    var msg = document.getElementById('taskResult');
-    if (msg) {
-      msg.parentNode.removeChild(msg);
-    }
+    orderItem.checked = value;
   };
 
   // Initialises variables and listener for the UI
   var initContainers = function initContainers() {
-    orderCheckbox = document.querySelector('[name="order.lastname"]');
-    orderCheckbox.addEventListener('change', onOrderingChange.bind(this));
+    orderItem = document.getElementById('settingsOrder');
+    orderItem.addEventListener('click', onOrderingChange.bind(this));
 
     simImportLink = document.querySelector('[data-l10n-id="importSim"]');
-    simImportLink.addEventListener('click',
-      onSimImport);
+    simImportLink.addEventListener('click', function onSimImportHandler() {
+      window.setTimeout(onSimImport, 0);
+    });
+
+    noSimMsg = document.querySelector('#no-sim');
 
     if (fb.isEnabled) {
       fbImportOption = document.querySelector('#settingsFb');
@@ -68,6 +66,7 @@ contacts.Settings = (function() {
       fbImportCheck = document.querySelector('[name="fb.imported"]');
 
       fbUpdateButton = document.querySelector('#import-fb');
+      fbOfflineMsg = document.querySelector('#no-connection');
       fbUpdateButton.onclick = Contacts.extFb.importFB;
       fbTotalsMsg = document.querySelector('#fb-totals');
       fbPwdRenewMsg = document.querySelector('#renew-pwd-msg');
@@ -100,17 +99,22 @@ contacts.Settings = (function() {
       return;
     }
 
-    enableSIMImport(conn.cardState == 'ready');
+    // Card should either be "ready" (connected to network) or "null" (card in
+    // phone but cannot connect to network for some reason).
+    enableSIMImport(conn.cardState);
   };
 
   // Disables/Enables the actions over the sim import functionality
-  var enableSIMImport = function enableSIMImport(enable) {
-    var importSim = document.getElementById('settingsSIM');
+  var enableSIMImport = function enableSIMImport(cardState) {
+    var enable = (cardState === 'ready' || cardState === null);
+    var importSim = document.getElementById('settingsSIM').firstElementChild;
     if (enable) {
-      importSim.removeAttribute('aria-disabled');
+      importSim.removeAttribute('disabled');
+      noSimMsg.classList.add('hide');
     }
     else {
-      importSim.setAttribute('aria-disabled', 'true');
+      importSim.setAttribute('disabled', 'disabled');
+      noSimMsg.classList.remove('hide');
     }
   };
 
@@ -126,6 +130,7 @@ contacts.Settings = (function() {
     }
     else if (fbImportedValue === 'logged-out') {
       fbSetDisabledState();
+      fbTotalsMsg.textContent = _('notEnabledYet');
     }
     else if (fbImportedValue === 'renew-pwd') {
       fbSetEnabledState();
@@ -199,17 +204,6 @@ contacts.Settings = (function() {
     Contacts.extFb.importFB();
   };
 
-   var addMessage = function addMessage(message, after) {
-      var li = document.createElement('li');
-      li.id = 'taskResult';
-      li.classList.add('result');
-      var span = document.createElement('span');
-      span.innerHTML = message;
-      li.appendChild(span);
-
-      after.parentNode.insertBefore(li, after.nextSibling);
-    };
-
   var onFbEnable = function onFbEnable(evt) {
     var WAIT_UNCHECK = 400;
 
@@ -269,7 +263,7 @@ contacts.Settings = (function() {
   }
 
   function doFbUnlink() {
-    Contacts.showOverlay(_('cleaningFbData'));
+    utils.overlay.show(_('cleaningFbData'));
     var wakeLock = navigator.requestWakeLock('cpu');
 
     var req = fb.utils.clearFbData();
@@ -320,39 +314,72 @@ contacts.Settings = (function() {
       window.console.error('Error while starting the cleaning operations',
                            req.error.name);
       resetWait(wakeLock);
-    }
+    };
   }
 
   // Listens for any change in the ordering preferences
   var onOrderingChange = function onOrderingChange(evt) {
-    newOrderByLastName = evt.target.checked;
+    var checkBox = evt.target.querySelector('[name="order.lastname"]');
+    checkBox.checked = !checkBox.checked;
+    newOrderByLastName = checkBox.checked;
     asyncStorage.setItem(ORDER_KEY, newOrderByLastName);
     updateOrderingUI();
   };
 
   // Import contacts from SIM card and updates ui
   var onSimImport = function onSimImport(evt) {
-    // Auto remove previous message if present
-    cleanMessage();
+    var progress = Contacts.showOverlay(_('simContacts-importing'), true);
+    var wakeLock = navigator.requestWakeLock('cpu');
 
-    Contacts.showOverlay(_('simContacts-importing'));
-    var after = document.getElementById('settingsSIM');
+    var importer = new SimContactsImporter();
+    var totalContactsToImport;
+    var importedContacts = 0;
+    // Delay for showing feedback to the user after importing
+    var DELAY_FEEDBACK = 200;
 
-    importSIMContacts(
-      function onread() {
+    importer.onread = function import_read(n) {
+      totalContactsToImport = n;
+      progress.setTotal(totalContactsToImport);
+    };
 
-      },
-      function onimport(num) {
-        if (num > 0) {
+    importer.onfinish = function import_finish() {
+      window.setTimeout(function onfinish_import() {
+        if (totalContactsToImport > 0) {
           contacts.List.load();
         }
-        addMessage(_('simContacts-imported3', {n: num}), after);
+        resetWait(wakeLock);
+        Contacts.navigation.home();
+        Contacts.showStatus(_('simContacts-imported3',
+                              {n: importedContacts}));
+      }, DELAY_FEEDBACK);
+    };
+
+    importer.onimported = function imported_contact() {
+      importedContacts++;
+      progress.update();
+    };
+
+    importer.onerror = function import_error() {
+      var cancel = {
+          title: _('cancel'),
+          callback: function() {
+            ConfirmDialog.hide();
+          }
+        };
+        var retry = {
+          title: _('retry'),
+          isRecommend: true,
+          callback: function() {
+            ConfirmDialog.hide();
+            // And now the action is reproduced one more time
+            simImportLink.click();
+          }
+        };
+        ConfirmDialog.show(null, _('simContacts-error'), cancel, retry);
         Contacts.hideOverlay();
-      },
-      function onerror() {
-        addMessage(_('simContacts-error'), after);
-        Contacts.hideOverlay();
-      });
+    };
+
+    importer.start();
   };
 
   // Dismiss settings window and execute operations if values got modified
@@ -363,8 +390,6 @@ contacts.Settings = (function() {
       orderByLastName = newOrderByLastName;
     }
 
-    // Clean possible messages
-    cleanMessage();
     Contacts.goBack();
   };
 
@@ -372,13 +397,13 @@ contacts.Settings = (function() {
     if (fb.isEnabled) {
       if (navigator.onLine === true) {
         fbImportOption.querySelector('li').removeAttribute('aria-disabled');
-        fbUpdateButton.removeAttribute('disabled');
-      }
-      else {
+        fbUpdateButton.classList.remove('hide');
+        fbOfflineMsg.classList.add('hide');
+      } else {
         fbImportOption.querySelector('li.fb-item').setAttribute('aria-disabled',
                                                               'true');
-        fbUpdateButton.removeAttribute('disabled');
-        fbUpdateButton.setAttribute('disabled', 'disabled');
+        fbUpdateButton.classList.add('hide');
+        fbOfflineMsg.classList.remove('hide');
       }
     }
   };
@@ -393,6 +418,7 @@ contacts.Settings = (function() {
     'init': init,
     'close': close,
     'refresh': refresh,
-    'onLineChanged': checkOnline
+    'onLineChanged': checkOnline,
+    'cardStateChanged': checkSIMCard
   };
 })();

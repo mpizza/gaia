@@ -7,9 +7,11 @@
     "name": "The Gaia Team",
     "url": "https://github.com/mozilla-b2g/gaia"
   },
+  "fullscreen": true,
   "permissions": {
     "device-storage:pictures":{ "access": "readwrite" },
     "device-storage:videos":{ "access": "readwrite" },
+    "audio-channel-content":{},
     "settings":{ "access": "readonly" }
   },
   "activities": {
@@ -29,7 +31,7 @@
     },
     "open": {
       "filters": {
-        "type": ["image/jpeg", "image/png"]
+        "type": ["image/jpeg", "image/png", "image/gif"]
        },
       "disposition": "inline",
       "returnValue": true,

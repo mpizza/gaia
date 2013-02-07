@@ -2,6 +2,11 @@
   var template = Calendar.Templates.Month;
   var Calc = Calendar.Calc;
 
+  // horrible hack to clear cache when we re-localize
+  window.addEventListener('localized', function clearHeaderCache() {
+    Child._dayHeaders = null;
+  });
+
   function Child() {
     Calendar.View.apply(this, arguments);
 
@@ -18,6 +23,8 @@
     __proto__: Calendar.View.prototype,
 
     ACTIVE: 'active',
+
+    hasBeenActive: false,
 
     busyPrecision: (24 / 12),
 
@@ -190,9 +197,22 @@
         var html = '';
 
         for (; i < days; i++) {
-          name = navigator.mozL10n.get('weekday-' + i + '-short');
+          var day = i;
+          // localization updates this value
+          if (Calendar.Calc.startsOnMonday) {
+            // 0 is monday which is 1 in l10n (based on js engine's getDay)
+            day += 1;
+
+            // 6th day of the week which Sunday (and 0 in js engine).
+            if (day === 7) {
+              day = 0;
+            }
+          }
+          var l10n = 'weekday-' + day + '-short';
+
+          name = navigator.mozL10n.get(l10n);
           html += template.weekDaysHeaderDay.render({
-            day: String(i),
+            day: String(day),
             dayName: name
           });
         }
@@ -363,6 +383,26 @@
      */
     activate: function() {
       this.element.classList.add(this.ACTIVE);
+
+
+      /**
+       * The first time we "activate" a view we initialize its
+       * events and query th cache for related records.
+       * We do this async so to minimally effect swipes.
+       */
+      if (this.hasBeenActive)
+        return;
+
+      Calendar.nextTick(function() {
+        this.controller.queryCache(this.timespan).forEach(
+          this._renderBusytime,
+          this
+        );
+
+        this._initEvents();
+      }.bind(this));
+
+      this.hasBeenActive = true;
     },
 
     /**
@@ -390,13 +430,6 @@
       element.innerHTML = html;
 
       this.element = element;
-
-      controller.queryCache(this.timespan).forEach(
-        this._renderBusytime,
-        this
-      );
-
-      this._initEvents();
 
       return element;
     },

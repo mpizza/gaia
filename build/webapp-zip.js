@@ -13,11 +13,6 @@ const PR_TRUNCATE = 0x20;
 const PR_SYNC = 0x40;
 const PR_EXCL = 0x80;
 
-function isSubjectToBranding(path) {
-  return /shared\/[a-zA-Z]+\/branding$/.test(path) ||
-         /branding\/initlogo.png/.test(path);
-}
-
 /**
  * Add a file or a directory, recursively, to a zip file
  *
@@ -26,7 +21,6 @@ function isSubjectToBranding(path) {
  * @param {nsIFile}      file      file xpcom to add.
  */
 function addToZip(zip, pathInZip, file) {
-  // Branding specific code
   if (isSubjectToBranding(file.path)) {
     file.append((OFFICIAL == 1) ? 'official' : 'unofficial');
   }
@@ -43,7 +37,21 @@ function addToZip(zip, pathInZip, file) {
     try {
       debug(' +file to zip ' + pathInZip);
 
-      if (!zip.hasEntry(pathInZip)) {
+      if (/\.html$/.test(file.leafName)) {
+        // this file might have been pre-translated for the default locale
+        let l10nFile = file.parent.clone();
+        l10nFile.append(file.leafName + '.' + GAIA_DEFAULT_LOCALE);
+        if (l10nFile.exists()) {
+          zip.addEntryFile(pathInZip,
+                          Ci.nsIZipWriter.COMPRESSION_DEFAULT,
+                          l10nFile,
+                          false);
+          return;
+        }
+      }
+
+      let re = new RegExp('\\.html\\.' + GAIA_DEFAULT_LOCALE);
+      if (!zip.hasEntry(pathInZip) && !re.test(file.leafName)) {
         zip.addEntryFile(pathInZip,
                         Ci.nsIZipWriter.COMPRESSION_DEFAULT,
                         file,
@@ -57,6 +65,7 @@ function addToZip(zip, pathInZip, file) {
   // Case 2/ Directory
   else if (file.isDirectory()) {
     debug(' +directory to zip ' + pathInZip);
+
     if (!zip.hasEntry(pathInZip))
       zip.addEntryDirectory(pathInZip, file.lastModifiedTime, false);
 
@@ -142,6 +151,10 @@ Gaia.webapps.forEach(function(webapp) {
   debug('# Create zip for: ' + webapp.domain);
   let files = ls(webapp.sourceDirectoryFile);
   files.forEach(function(file) {
+      // Ignore l10n files if they have been inlined
+      if (GAIA_INLINE_LOCALES &&
+          (file.leafName === 'locales' || file.leafName === 'locales.ini'))
+        return;
       // Ignore files from /shared directory (these files were created by
       // Makefile code). Also ignore files in the /test directory.
       if (file.leafName !== 'shared' && file.leafName !== 'test')
@@ -151,7 +164,8 @@ Gaia.webapps.forEach(function(webapp) {
   // Put shared files, but copy only files actually used by the webapp.
   // We search for shared file usage by parsing webapp source code.
   let EXTENSIONS_WHITELIST = ['html'];
-  let SHARED_USAGE = /<(?:script|link).+=['"]\.?\.?\/?shared\/([^\/]+)\/([^''\s]+)("|')/g;
+  let SHARED_USAGE =
+      /<(?:script|link).+=['"]\.?\.?\/?shared\/([^\/]+)\/([^''\s]+)("|')/g;
 
   let used = {
     js: [],              // List of JS file paths to copy
@@ -181,9 +195,11 @@ Gaia.webapps.forEach(function(webapp) {
               used.js.push(path);
             break;
           case 'locales':
-            let localeName = path.substr(0, path.lastIndexOf('.'));
-            if (used.locales.indexOf(localeName) == -1) {
-              used.locales.push(localeName);
+            if (!GAIA_INLINE_LOCALES) {
+              let localeName = path.substr(0, path.lastIndexOf('.'));
+              if (used.locales.indexOf(localeName) == -1) {
+                used.locales.push(localeName);
+              }
             }
             break;
           case 'resources':
@@ -245,6 +261,9 @@ Gaia.webapps.forEach(function(webapp) {
     file.append('resources');
     path.split('/').forEach(function(segment) {
       file.append(segment);
+      if (isSubjectToBranding(file.path)) {
+        file.append((OFFICIAL == 1) ? 'official' : 'unofficial');
+      }
     });
     if (!file.exists()) {
       throw new Error('Using inexistent shared resource: ' + path +
@@ -257,7 +276,7 @@ Gaia.webapps.forEach(function(webapp) {
   used.styles.forEach(function(name) {
     try {
       copyBuildingBlock(zip, name, 'style');
-    } catch(e) {
+    } catch (e) {
       throw new Error(e + ' from: ' + webapp.domain);
     }
   });
@@ -265,11 +284,10 @@ Gaia.webapps.forEach(function(webapp) {
   used.unstable_styles.forEach(function(name) {
     try {
       copyBuildingBlock(zip, name, 'style_unstable');
-    } catch(e) {
+    } catch (e) {
       throw new Error(e + ' from: ' + webapp.domain);
     }
   });
 
   zip.close();
 });
-

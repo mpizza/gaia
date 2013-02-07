@@ -210,13 +210,32 @@ var gBluetooth = (function(window) {
 // display connectivity status on the main panel
 var Connectivity = (function(window, document, undefined) {
   var _ = navigator.mozL10n.get;
+  var wifiEnabledListeners = [updateWifi];
+  var wifiDisabledListeners = [updateWifi];
+  var wifiStatusChangeListeners = [updateWifi];
   var settings = Settings.mozSettings;
 
+  //
+  // Set wifi.enabled so that it mirrors the state of the hardware.
+  // wifi.enabled is not an ordinary user setting because the system
+  // turns it on and off when wifi goes up and down.
+  //
+  settings.createLock().set({'wifi.enabled': gWifiManager.enabled});
+
+  //
+  // Now register callbacks to track the state of the wifi hardware
+  //
+  gWifiManager.onenabled = function() {
+    dispatchEvent(new CustomEvent('wifi-enabled'));
+    wifiEnabled();
+  };
+  gWifiManager.ondisabled = function() {
+    dispatchEvent(new CustomEvent('wifi-disabled'));
+    wifiDisabled();
+  };
+  gWifiManager.onstatuschange = wifiStatusChange;
+
   function init() {
-    // these listeners are replaced when wifi.js is loaded
-    gWifiManager.onenabled = updateWifi;
-    gWifiManager.ondisabled = updateWifi;
-    gWifiManager.onstatuschange = updateWifi;
     updateWifi();
 
     // this event listener is not cleared by carrier.js
@@ -228,9 +247,15 @@ var Connectivity = (function(window, document, undefined) {
     gMobileConnection.addEventListener('datachange', updateCarrier);
     updateCarrier();
 
-    // this listener is replaced when bluetooth.js is loaded
-    gBluetooth.onadapteradded = updateBluetooth;
-    gBluetooth.ondisabled = updateBluetooth;
+    // these listeners are replaced when bluetooth.js is loaded
+    gBluetooth.onadapteradded = function() {
+      dispatchEvent(new CustomEvent('bluetooth-adapter-added'));
+      updateBluetooth();
+    };
+    gBluetooth.ondisabled = function() {
+      dispatchEvent(new CustomEvent('bluetooth-disabled'));
+      updateBluetooth();
+    };
     updateBluetooth();
     initSystemMessageHandler();
   }
@@ -253,6 +278,24 @@ var Connectivity = (function(window, document, undefined) {
     if (settings) {
       settings.createLock().set({ 'deviceinfo.mac': gWifiManager.macAddress });
     }
+  }
+
+  function wifiEnabled() {
+    // Keep the setting in sync with the hardware state.
+    // We need to do this because b2g/dom/wifi/WifiWorker.js can turn
+    // the hardware on and off
+    settings.createLock().set({'wifi.enabled': true});
+    wifiEnabledListeners.forEach(function(listener) { listener(); });
+  }
+
+  function wifiDisabled() {
+    // Keep the setting in sync with the hardware state.
+    settings.createLock().set({'wifi.enabled': false});
+    wifiDisabledListeners.forEach(function(listener) { listener(); });
+  }
+
+  function wifiStatusChange(event) {
+    wifiStatusChangeListeners.forEach(function(listener) { listener(event); });
   }
 
   /**
@@ -279,7 +322,6 @@ var Connectivity = (function(window, document, undefined) {
   };
 
   var dataDesc = document.getElementById('data-desc');
-  var callDesc = document.getElementById('call-desc');
 
   function updateCarrier() {
     var setCarrierStatus = function(msg) {
@@ -288,7 +330,6 @@ var Connectivity = (function(window, document, undefined) {
       var text = msg.error ||
         ((data && operator) ? (operator + ' - ' + data) : operator);
       dataDesc.textContent = text;
-      callDesc.textContent = text;
 
       /**
        * XXX italic style for specifying state change is not a ideal solution
@@ -297,7 +338,6 @@ var Connectivity = (function(window, document, undefined) {
        * We might have to switch to labels with parenthesis for these languages.
        */
       dataDesc.style.fontStyle = msg.error ? 'italic' : 'normal';
-      callDesc.style.fontStyle = msg.error ? 'italic' : 'normal';
 
       // in case the "Carrier & Data" panel is displayed...
       var dataNetwork = document.getElementById('dataNetwork-desc');
@@ -319,8 +359,12 @@ var Connectivity = (function(window, document, undefined) {
     // operator name & data connection type
     if (!gMobileConnection.data || !gMobileConnection.data.network)
       return setCarrierStatus({ error: '???'}); // XXX should never happen
+    var operatorInfos = MobileOperator.userFacingInfo(gMobileConnection);
+    var operator = operatorInfos.operator;
+    if (operatorInfos.region) {
+      operator += ' ' + operatorInfos.region;
+    }
     var data = gMobileConnection.data;
-    var operator = data.network.shortName || data.network.longName;
     var dataType = (data.connected && data.type) ? kDataType[data.type] : '';
     setCarrierStatus({
       operator: operator,
@@ -407,11 +451,14 @@ var Connectivity = (function(window, document, undefined) {
         hotspot: document.getElementById('hotspot-desc').textContent,
         bluetooth: document.getElementById('bluetooth-desc').textContent
       };
-    }
+    },
+    set wifiEnabled(listener) { wifiEnabledListeners.push(listener) },
+    set wifiDisabled(listener) { wifiDisabledListeners.push(listener); },
+    set wifiStatusChange(listener) { wifiStatusChangeListeners.push(listener); }
   };
 })(this, document);
 
 
 // startup
-onLocalized(Connectivity.init.bind(Connectivity));
+navigator.mozL10n.ready(Connectivity.init.bind(Connectivity));
 

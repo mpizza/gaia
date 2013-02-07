@@ -104,7 +104,14 @@ const IMERender = (function() {
       row.forEach((function buildKeyboardColumns(key, ncolumn) {
 
         var keyChar = key.value;
-        var overrides = layout[flags.inputType + 'Overrides'];
+
+        // Keys may be hidden if the .hidden property contains the inputType
+        if (key.hidden && key.hidden.indexOf(flags.inputType) !== -1)
+          return;
+
+        // Keys may be visible if the .visibile property contains the inputType
+        if (key.visible && key.visible.indexOf(flags.inputType) === -1)
+          return;
 
         // Handle uppercase
         if (flags.uppercase) {
@@ -112,16 +119,17 @@ const IMERender = (function() {
         }
 
         // Handle override
-        var code;
-        if (overrides && overrides[keyChar]) {
-          keyChar = overrides[keyChar];
-          code = keyChar.charCodeAt(0);
-
-        } else {
-          code = key.keyCode || keyChar.charCodeAt(0);
-        }
+        var code = key.keyCode || keyChar.charCodeAt(0);
 
         var className = isSpecialKey(key) ? 'special-key' : '';
+
+        // telLayout and numberLayout keys works like special-keys without
+        // popups
+        if (!isSpecialKey(key) &&
+            (inputType === 'tel' || inputType === 'number')) {
+          className = 'special-key big-key';
+        }
+
         var ratio = key.ratio || 1;
 
         var keyWidth = placeHolderWidth * ratio;

@@ -2,8 +2,8 @@
 "use strict";
 
 var EvmeManager = (function EvmeManager() {
-    var currentWindow = null;
-    var currentURL = null;
+    var currentWindow = null,
+        currentURL = null;
 
     function openApp(params) {
         var evmeApp = new EvmeApp({
@@ -12,7 +12,7 @@ var EvmeManager = (function EvmeManager() {
             icon: params.icon
         });
 
-        evmeApp.launch(params.url, params.urlTitle);
+        evmeApp.launch(params.url, params.urlTitle, params.useAsyncPanZoom);
         currentURL = params.url;
     }
 
@@ -20,7 +20,9 @@ var EvmeManager = (function EvmeManager() {
         GridManager.install(new Bookmark({
           bookmarkURL: params.originUrl,
           name: params.title,
-          icon: params.icon
+          icon: params.icon,
+          iconable: false,
+          useAsyncPanZoom: params.useAsyncPanZoom
         }));
     }
 
@@ -54,11 +56,14 @@ var EvmeManager = (function EvmeManager() {
     }
 
     function getAppIcon(app) {
-        var iconsForApp = GridManager.getIconsForApp(app);
-        for (var entryPoint in iconsForApp) {
-          return iconsForApp[entryPoint].descriptor.icon;
+        var iconObject = GridManager.getIcon(app);
+        if (iconObject &&
+                'descriptor' in iconObject &&
+                'renderedIcon' in iconObject.descriptor) {
+            return iconObject.descriptor.renderedIcon;    
         }
     }
+
     function getAppName(app) {
         var manifest = app.manifest;
         if (!manifest) {
@@ -108,11 +113,12 @@ var EvmeApp = function createEvmeApp(params) {
 
 extend(EvmeApp, Bookmark);
 
-EvmeApp.prototype.launch = function evmeapp_launch(url, name) {
+EvmeApp.prototype.launch = function evmeapp_launch(url, name, useAsyncPanZoom) {
     var features = {
       name: this.manifest.name.replace(/\s/g, '&nbsp;'),
       icon: this.manifest.icons['60'],
-      remote: true
+      remote: true,
+      useAsyncPanZoom: useAsyncPanZoom
     };
 
     if (!GridManager.getIconForBookmark(this.origin)) {

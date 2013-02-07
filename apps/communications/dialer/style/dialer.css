@@ -16,16 +16,6 @@ a:hover, a:active, a:focus {
   outline: 0;
 }
 
-.font-regular {
-  font-family: 'MozTT';
-  font-weight: 400;
-}
-
-.font-light {
-  font-family: 'MozTT';
-  font-weight: 300;
-}
-
 .hide {
   display: none !important;
 }
@@ -93,10 +83,16 @@ body.hidden *[data-l10n-id] {
   display: none;
 }
 
-#iframe-contacts {
+/* Making lazy loading look nice */
+#iframe-contacts,
+#recents-view.hidden [role="tabpanel"] {
   background-image: url(/shared/style/headers/images/ui/header.png),
                     url(/shared/style/headers/images/ui/shadow.png);
   background-repeat: repeat-x;
   background-position: 0 0, 0 5rem;
   background-size: 100% 5rem, 100% 0.3rem;
+}
+
+#recents-view.hidden [role="tabpanel"] section {
+  visibility: hidden;
 }

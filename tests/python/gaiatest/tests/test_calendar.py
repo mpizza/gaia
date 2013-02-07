@@ -33,6 +33,15 @@ class TestCalendar(GaiaTestCase):
     def setUp(self):
         GaiaTestCase.setUp(self)
 
+        # Setting the system time to a hardcoded datetime to avoid timezone issues
+        # Jan. 1, 2013, according to http://www.epochconverter.com/
+        _seconds_since_epoch = 1357043430
+        self.today = datetime.datetime.utcfromtimestamp(_seconds_since_epoch)
+
+        # set the system date to an expected date, and timezone to UTC
+        self.data_layer.set_time(_seconds_since_epoch * 1000)
+        self.data_layer.set_setting('time.timezone', 'Atlantic/Reykjavik')
+
         # launch the Calendar app
         self.app = self.apps.launch('calendar')
 
@@ -51,17 +60,9 @@ class TestCalendar(GaiaTestCase):
         month_title = self.marionette.find_element(
             *self._current_month_year_locator)
 
-        # Get today's date - month, year, weekday
-        today = datetime.datetime.today()
-        month = calendar.month_name[today.month]
-        year = today.year
-        weekday = DAYS_OF_WEEK[today.weekday()]
-
         # validate month title and selected day aligns with today's date
-        self.assertEquals(month_title.text, '%s %s' % (month, year),
-            "wrong month title for today");
-        self.assertEquals(selected_day.text, '%s %s %s' % (weekday,
-            month.upper(), year), "wrong selected day for today")
+        self.assertEquals(month_title.text, self.today.strftime('%B %Y'))
+        self.assertEquals(selected_day.text, self.today.strftime('%A %-d %B %Y').upper())
 
     def test_that_new_event_appears_on_all_calendar_views(self):
         # https://github.com/mozilla/gaia-ui-tests/issues/102
@@ -70,23 +71,29 @@ class TestCalendar(GaiaTestCase):
         event_location = "Event Location %s" % str(time.time())
         event_start_time = "01:00:00"
         event_end_time = "02:00:00"
-        formatted_today = time.strftime("%b %d")
-        this_event_time_slot_locator = ('css selector',
-                                         '#event-list section.hour-1 span.display-hour')
-        month_view_time_slot_all_events_locator = ('css selector',
-                                                '#event-list section.hour-1 div.events')
-        week_view_time_slot_all_events_locator = ('css selector',
-                                                "#week-view section.active[data-date*='%s'] ol.hour-1" % formatted_today)
-        day_view_time_slot_all_events_locator = ('css selector',
-                                                "#day-view section.active[data-date*='%s'] section.hour-1" % formatted_today)
-        day_view_time_slot_individual_events_locator = ('css selector',
-                                               "#day-view section.active[data-date*='%s'] section.hour-1 div.events div.container" % formatted_today)
+        formatted_today = self.today.strftime("%b %d")
+        this_event_time_slot_locator = (
+            'css selector',
+            '#event-list section.hour-1 span.display-hour')
+        month_view_time_slot_all_events_locator = (
+            'css selector',
+            '#event-list section.hour-1 div.events')
+        week_view_time_slot_all_events_locator = (
+            'css selector',
+            "#week-view section.active[data-date*='%s'] ol.hour-1" % formatted_today)
+        day_view_time_slot_all_events_locator = (
+            'css selector',
+            "#day-view section.active[data-date*='%s'] section.hour-1" % formatted_today)
+        day_view_time_slot_individual_events_locator = (
+            'css selector',
+            "#day-view section.active[data-date*='%s'] section.hour-1 div.events div.container" % formatted_today)
 
         # wait for the add event button to appear
         self.wait_for_element_displayed(*self._add_event_button_locator)
 
         # click the add event button
-        self.marionette.find_element(*self._add_event_button_locator).click()
+        add_event_button = self.marionette.find_element(*self._add_event_button_locator)
+        self.marionette.tap(add_event_button)
         self.wait_for_element_displayed(*self._event_title_input_locator)
 
         # create a new event
@@ -96,27 +103,32 @@ class TestCalendar(GaiaTestCase):
         self.marionette.find_element(*self._event_start_time_input_locator).send_keys(event_start_time)
         self.marionette.find_element(*self._event_end_time_input_locator).clear()
         self.marionette.find_element(*self._event_end_time_input_locator).send_keys(event_end_time)
-        self.marionette.find_element(*self._save_event_button_locator).click()
+        save_event_button = self.marionette.find_element(*self._save_event_button_locator)
+        self.marionette.tap(save_event_button)
 
         # wait for the default calendar display
-        self.wait_for_element_displayed(*self._event_list_locator)
+        self.wait_for_element_displayed(*this_event_time_slot_locator)
 
         # assert that the event is displayed as expected
         self.assertTrue(self.marionette.find_element(*this_event_time_slot_locator).is_displayed(),
-            "Expected the time slot for the event to be present.")
+                        "Expected the time slot for the event to be present.")
         displayed_events = self.marionette.find_element(*month_view_time_slot_all_events_locator).text
         self.assertIn(event_title, displayed_events)
         self.assertIn(event_location, displayed_events)
 
         # switch to the week display
-        self.marionette.find_element(*self._week_display_button_locator).click()
-        self.wait_for_element_displayed(*self._week_view_locator)
+        week_display_button = self.marionette.find_element(*self._week_display_button_locator)
+        self.marionette.tap(week_display_button)
+
+        self.wait_for_element_displayed(*week_view_time_slot_all_events_locator)
         displayed_events = self.marionette.find_element(*week_view_time_slot_all_events_locator).text
         self.assertIn(event_title, displayed_events)
 
         # switch to the day display
-        self.marionette.find_element(*self._day_display_button_locator).click()
-        self.wait_for_element_displayed(*self._day_view_locator)
+        day_display_button = self.marionette.find_element(*self._day_display_button_locator)
+        self.marionette.tap(day_display_button)
+
+        self.wait_for_element_displayed(*day_view_time_slot_all_events_locator)
         displayed_events = self.marionette.find_element(*day_view_time_slot_all_events_locator).text
         self.assertIn(event_title, displayed_events)
         self.assertIn(event_location, displayed_events)
@@ -124,17 +136,10 @@ class TestCalendar(GaiaTestCase):
         # delete all events in the time slot
         all_events = self.marionette.find_elements(*day_view_time_slot_individual_events_locator)
         while len(all_events) > 0:
-            all_events[0].click()
+            self.marionette.tap(all_events[0])
             self.wait_for_element_displayed(*self._event_title_input_locator)
-            self.marionette.find_element(*self._delete_event_button_locator).click()
+            delete_event_button = self.marionette.find_element(*self._delete_event_button_locator)
+            self.marionette.tap(delete_event_button)
+
             self.wait_for_element_displayed(*self._day_view_locator)
             all_events = self.marionette.find_elements(*day_view_time_slot_individual_events_locator)
-
-    def tearDown(self):
-
-        # close the app
-        if hasattr(self, 'app'):
-            self.apps.kill(self.app)
-
-        GaiaTestCase.tearDown(self)
-

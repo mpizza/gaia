@@ -1,63 +1,127 @@
 'use strict';
 
 var LanguageManager = {
+  settings: window.navigator.mozSettings,
+
   init: function init() {
-    var panel = document.getElementById('languages');
-    this.buildLanguageList(panel.querySelector('ul'));
-    panel.addEventListener('change', this);
+    this.getCurrentLanguage(this.buildLanguageList.bind(this));
+    this.getCurrentKeyboardLayout();
+    this.getSupportedKbLayouts();
+    document.getElementById('languages').addEventListener('change', this);
+    this.settings.addObserver('language.current',
+        this.changeDefaultKb.bind(this));
   },
 
   handleEvent: function handleEvent(evt) {
-    if (evt.target.name != 'language.current') {
+    if (!this.settings || evt.target.name != 'language.current')
       return true;
-    }
-
-    var settings = window.navigator.mozSettings;
-    if (!settings.createLock) {
-      return true;
-    }
-    var req = settings.createLock().get('language.current');
-
-    req.onsuccess = function() {
-      settings.createLock().set({'language.current': evt.target.value});
-    };
-
-    req.onerror = function() {
-      console.error('Error changing language');
-    };
-
+    this.settings.createLock().set({'language.current': evt.target.value});
     return false;
   },
 
-  getSupportedLanguages: function settings_getLanguages(callback) {
-    var LANGUAGES = '/shared/resources/languages.json';
+  changeDefaultKb: function changeDefaultKb(event) {
+    if (this._kbLayoutList) {
+      var lock = this.settings.createLock();
+      var oldKB = this._kbLayoutList[this._currentLanguage];
+      var newKB = this._kbLayoutList[event.settingValue];
+      var settingOldKB = {};
+      var settingNewKB = {};
+      settingOldKB['keyboard.layouts.' + oldKB] = false;
+      settingNewKB['keyboard.layouts.' + newKB] = true;
+
+      lock.set(settingOldKB);
+      lock.set(settingNewKB);
+      lock.set({'keyboard.current': event.settingValue});
+      console.log('Keyboard layout changed to ' + event.settingValue);
+
+      this._currentLanguage = event.settingValue;
+    }
+  },
+
+  getCurrentLanguage: function settings_getCurrent(callback) {
+    var self = this;
+    this.readSetting('language.current', function onResponse(setting) {
+      self._currentLanguage = setting;
+      callback(setting);
+    });
+  },
+
+  getCurrentKeyboardLayout: function settings_getCurrentKb() {
+    var self = this;
+    this.readSetting('keyboard.current', function onResponse(setting) {
+      if (setting) {
+        self._currentKbLayout = setting;
+      }
+    });
+  },
+
+  readSetting: function settings_readSetting(name, callback) {
+    var settings = window.navigator.mozSettings;
+    if (!settings || !settings.createLock || !callback)
+      return;
+
+    var req = settings.createLock().get(name);
+
+    req.onsuccess = function _onsuccess() {
+      callback(req.result[name]);
+    };
+
+    req.onerror = function _onerror() {
+      console.error('Error checking setting ' + name);
+    };
+  },
+
+  getSupportedLanguages: function settings_getSupportedLanguages(callback) {
     if (!callback)
       return;
 
     if (this._languages) {
       callback(this._languages);
     } else {
+      var LANGUAGES = 'languages.json';
       var self = this;
-      var xhr = new XMLHttpRequest();
-      xhr.onreadystatechange = function loadSupportedLocales() {
-        if (xhr.readyState === 4) {
-          if (xhr.status === 0 || xhr.status === 200) {
-            self._languages = xhr.response;
-            callback(self._languages);
-          } else {
-            console.error('Failed to fetch languages.json: ', xhr.statusText);
-          }
+      this.readSharedFile(LANGUAGES, function getLanguages(data) {
+        if (data) {
+          self._languages = data;
+          callback(self._languages);
         }
-      };
-      xhr.open('GET', LANGUAGES, true); // async
-      xhr.responseType = 'json';
-      xhr.send();
+      });
     }
   },
 
-  buildLanguageList: function settings_buildLanguageList(container) {
+  getSupportedKbLayouts: function settings_getSupportedKbLayouts() {
+    var KEYBOARDS = 'keyboard_layouts.json';
+    var self = this;
+    this.readSharedFile(KEYBOARDS, function getKeyboardLayouts(data) {
+      if (data) {
+        self._kbLayoutList = data;
+      }
+    });
+  },
+
+  readSharedFile: function settings_readSharedFile(file, callback) {
+    var URI = '/shared/resources/' + file;
+    if (!callback)
+      return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function loadFile() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 0 || xhr.status === 200) {
+          callback(xhr.response);
+        } else {
+          console.error('Failed to fetch file: ' + file, xhr.statusText);
+        }
+      }
+    };
+    xhr.open('GET', URI, true); // async
+    xhr.responseType = 'json';
+    xhr.send();
+  },
+
+  buildLanguageList: function settings_buildLanguageList(uiLanguage) {
+    var container = document.querySelector('#languages ul');
     container.innerHTML = '';
-    var uiLanguage = document.documentElement.lang || 'en-US';
     this.getSupportedLanguages(function fillLanguageList(languages) {
       for (var lang in languages) {
         var input = document.createElement('input');

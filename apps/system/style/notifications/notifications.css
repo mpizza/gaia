@@ -127,7 +127,8 @@ html, body {
 }
 
 .notification > div:first-of-type {
-  margin: 10px 0 0 50px;
+  width: 19.5rem;
+  margin: 1rem 0 0 5rem;
   font-size: 1.5rem;
   font-weight: 500;
   line-height: 1.9rem;
@@ -141,6 +142,7 @@ html, body {
   color: #bfbfbf;
   font-size: 1.4rem;
   line-height: 1.9rem;
+  min-height: 1.9rem;
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -150,9 +152,9 @@ html, body {
 .notification > .timestamp {
   position: absolute;
   right: 0;
-  top: 0;
+  top: -.2rem;
   color: #52B6CC;
-  margin: 14px 14px 0 0;
+  margin: 13px 15px 0 0;
   padding: 0;
   display: inline;
   line-height: 16px;
@@ -161,13 +163,14 @@ html, body {
 .notification > img {
   float: left;
   display: block;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   margin: 15px 10px;
   pointer-events: none;
 }
 
-.notification.disappearing {
+.notification.disappearing,
+#notification-toaster.disappearing {
   transition: transform 0.3s linear;
   transform: translateX(100%);
 }
@@ -179,11 +182,12 @@ html, body {
 
 #notifications-lockscreen-container {
   position: absolute;
-  top: 15rem;
+  top: 18rem;
   left: 0;
   width: 100%;
   max-height: 186px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 
   background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9),
                               rgba(0, 0, 0, 0.6) 78%,

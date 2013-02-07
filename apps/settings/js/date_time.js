@@ -24,7 +24,7 @@ var SetTime = (function SetTime() {
   };
 })();
 
-onLocalized(function SettingsDateAndTime() {
+navigator.mozL10n.ready(function SettingsDateAndTime() {
   var _ = navigator.mozL10n.get;
 
   function updateDate() {
@@ -49,10 +49,6 @@ onLocalized(function SettingsDateAndTime() {
     _updateClockTimeout = window.setTimeout(function updateClockTimeout() {
       updateClock();
     }, (59 - d.getSeconds()) * 1000);
-  }
-
-  function setTimeManualEnabled(enabled) {
-    gTimeAutoSwitch.dataset.state = enabled ? 'auto' : 'manual';
   }
 
   function setTime(type) {
@@ -86,7 +82,7 @@ onLocalized(function SettingsDateAndTime() {
     return;
 
   var gTimeAutoSwitch = document.getElementById('time-auto');
-  var gTimezoneCont = document.getElementById('timezone-continent');
+  var gTimezoneRegion = document.getElementById('timezone-region');
   var gTimezoneCity = document.getElementById('timezone-city');
   var gDatePicker = document.getElementById('date-picker');
   var gTimePicker = document.getElementById('time-picker');
@@ -100,16 +96,44 @@ onLocalized(function SettingsDateAndTime() {
    * Monitor time.nitz.automatic-update.enabled changes
    */
 
-  settings.addObserver('time.nitz.automatic-update.enabled', function(event) {
-    setTimeManualEnabled(event.settingValue);
+  var kTimeAutoEnabled = 'time.nitz.automatic-update.enabled';
+
+  function setTimeAutoEnabled(enabled) {
+    gTimeAutoSwitch.dataset.state = enabled ? 'auto' : 'manual';
+  }
+
+  settings.addObserver(kTimeAutoEnabled, function(event) {
+    setTimeAutoEnabled(!!event.settingValue);
   });
 
-  var reqTimeAutoUpdate =
-    settings.createLock().get('time.nitz.automatic-update.enabled');
-  reqTimeAutoUpdate.onsuccess = function dt_getStatusSuccess() {
-    var lastMozSettingValue =
-      reqTimeAutoUpdate.result['time.nitz.automatic-update.enabled'];
-    setTimeManualEnabled(lastMozSettingValue);
+  var reqTimeAutoEnabled = settings.createLock().get(kTimeAutoEnabled);
+  reqTimeAutoEnabled.onsuccess = function dt_getStatusSuccess() {
+    setTimeAutoEnabled(reqTimeAutoEnabled.result[kTimeAutoEnabled]);
+  };
+
+
+  /**
+   * Hide automatic time setting if NITZ is not available
+   */
+
+  var kTimeAutoAvailable = 'time.nitz.available';
+
+  function setTimeAutoAvailable(available) {
+    gTimeAutoSwitch.hidden = !available;
+    if (!available) { // disable the time auto-update if N/A
+      var cset = {};
+      cset[kTimeAutoEnabled] = false;
+      settings.createLock().set(cset);
+    }
+  }
+
+  settings.addObserver(kTimeAutoAvailable, function(event) {
+    setTimeAutoAvailable(!!event.settingValue);
+  });
+
+  var reqTimeAutoAvailable = settings.createLock().get(kTimeAutoAvailable);
+  reqTimeAutoAvailable.onsuccess = function nitz_getStatusSuccess() {
+    setTimeAutoAvailable(!!reqTimeAutoAvailable.result[kTimeAutoAvailable]);
   };
 
 
@@ -122,7 +146,7 @@ onLocalized(function SettingsDateAndTime() {
   updateClock();
 
   // monitor time.timezone changes, see /shared/js/tz_select.js
-  tzSelect(gTimezoneCont, gTimezoneCity);
+  tzSelect(gTimezoneRegion, gTimezoneCity);
 
   gDatePicker.addEventListener('input', function datePickerChange() {
     setTime('date');

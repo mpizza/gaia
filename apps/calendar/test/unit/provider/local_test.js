@@ -61,7 +61,7 @@ suite('provider/local', function() {
       done(function() {
         var first = list['local-first'];
         assert.equal(first.id, 'local-first');
-        assert.equal(first.name, 'Offline Calendar');
+        assert.equal(first.name, 'Offline calendar');
       });
     });
   });
@@ -117,7 +117,7 @@ suite('provider/local', function() {
 
       index.get(eventId).onsuccess = function(e) {
         busytime = e.target.result;
-      }
+      };
     }
 
     suite('#createEvent', function() {

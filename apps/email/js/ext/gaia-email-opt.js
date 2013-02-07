@@ -2208,6 +2208,12 @@ MailAPI.prototype = {
    *   }
    *   @case['no-dns-entry']{
    *     We couldn't find the domain name in question, full stop.
+   *
+   *     Not currently generated; eventually desired because it suggests a typo
+   *     and so a specialized error message is useful.
+   *   }
+   *   @case['no-config-info']{
+   *     We were unable to locate configuration information for the domain.
    *   }
    *   @case['unresponsive-server']{
    *     Requests to the server timed out.  AKA we sent packets into a black
@@ -2216,18 +2222,16 @@ MailAPI.prototype = {
    *   @case['port-not-listening']{
    *     Attempts to connect to the given port on the server failed.  We got
    *     packets back rejecting our connection.
+   *
+   *     Not currently generated; primarily desired because it is very useful if
+   *     we are domain guessing.  Also desirable for error messages because it
+   *     suggests a user typo or the less likely server outage.
    *   }
    *   @case['bad-security']{
    *     We were able to connect to the port and initiate TLS, but we didn't
    *     like what we found.  This could be a mismatch on the server domain,
    *     a self-signed or otherwise invalid certificate, insufficient crypto,
    *     or a vulnerable server implementation.
-   *   }
-   *   @case['not-an-imap-server']{
-   *     Whatever is there isn't actually an IMAP server.
-   *   }
-   *   @case['sucky-imap-server']{
-   *     The IMAP server is too bad for us to use.
    *   }
    *   @case['bad-user-or-pass']{
    *     The username and password didn't check out.  We don't know which one
@@ -2243,6 +2247,11 @@ MailAPI.prototype = {
    *   @case['not-authorized']{
    *     The username and password are correct, but the user isn't allowed to
    *     access the mail server.
+   *   }
+   *   @case['server-problem']{
+   *     We were able to talk to the "server" named in the details object, but
+   *     we encountered some type of problem.  The details object will also
+   *     include a "status" value.
    *   }
    *   @case['server-maintenance']{
    *     The server appears to be undergoing maintenance, at least for this
@@ -2271,6 +2280,17 @@ MailAPI.prototype = {
    *   @param[callback @func[
    *     @args[
    *       @param[err AccountCreationError]
+   *       @param[errDetails @dict[
+   *         @key[server #:optional String]{
+   *           The server we had trouble talking to.
+   *         }
+   *         @key[status #:optional @oneof[Number String]]{
+   *           The HTTP status code number, or "timeout", or something otherwise
+   *           providing detailed additional information about the error.  This
+   *           is usually too technical to be presented to the user, but is
+   *           worth encoding with the error name proper if possible.
+   *         }
+   *       ]]
    *     ]
    *   ]
    * ]
@@ -2301,7 +2321,7 @@ MailAPI.prototype = {
     }
     delete this._pendingRequests[msg.handle];
 
-    req.callback.call(null, msg.error);
+    req.callback.call(null, msg.error, msg.errorDetails);
   },
 
   _clearAccountProblems: function ma__clearAccountProblems(account) {
@@ -12222,11 +12242,12 @@ MailBridge.prototype = {
   _cmd_tryToCreateAccount: function mb__cmd_tryToCreateAccount(msg) {
     var self = this;
     this.universe.tryToCreateAccount(msg.details, msg.domainInfo,
-                                     function(error, account) {
+                                     function(error, account, errorDetails) {
         self.__sendMessage({
             type: 'tryToCreateAccountResults',
             handle: msg.handle,
             error: error,
+            errorDetails: errorDetails,
           });
       });
   },
@@ -17020,8 +17041,9 @@ ImapConnection.prototype.connect = function(loginCb) {
               box.parent = parent;
             }
             box.displayName = decodeModifiedUtf7(name);
-            if (!curChildren[name])
-              curChildren[name] = box;
+            if (curChildren[name])
+              box.children = curChildren[name].children;
+            curChildren[name] = box;
           }
         break;
         // QRESYNC (when successful) generates a "VANISHED (EARLIER) uids"
@@ -17208,17 +17230,19 @@ ImapConnection.prototype.connect = function(loginCb) {
   };
   this._state.conn.onerror = function(evt) {
     try {
-      var err = evt.data;
+      var err = evt.data, errType;
       // (only do error probing on things we can safely use 'in' on)
       if (err && typeof(err) === 'object') {
         // detect an nsISSLStatus instance by an unusual property.
-        if ('isNotValidAtThisTime' in err)
-          err = 'bad-security';
+        if ('isNotValidAtThisTime' in err) {
+          err = new Error('SSL error');
+          errType = err.type = 'bad-security';
+        }
       }
       clearTimeoutFunc(self._state.tmrConn);
       if (self._state.status === STATES.NOCONNECT) {
         var connErr = new Error('Unable to connect. Reason: ' + err);
-        connErr.type = 'unknown';
+        connErr.type = errType || 'unresponsive-server';
         connErr.serverResponse = '';
         loginCb(connErr);
       }
@@ -18175,7 +18199,11 @@ function parseFetch(str, literalData, fetchData) {
       fetchData.date = parseImapDateTime(result[i+1]);
     }
     else if (result[i] === 'FLAGS') {
-      fetchData.flags = result[i+1].filter(isNotEmpty);
+      // filter out empty flags and \Recent.  As RFC 3501 makes clear, the
+      // \Recent flag is effectively useless because its semantics are that
+      // only one connection will see it.  Accordingly, there's no need to
+      // trouble consumers with it.
+      fetchData.flags = result[i+1].filter(isNotEmptyOrRecent);
       // simplify comparison for downstream logic by sorting.
       fetchData.flags.sort();
     }
@@ -18417,6 +18445,12 @@ function stringExplode(string, delimiter, limit) {
 
 function isNotEmpty(str) {
   return str.trim().length > 0;
+}
+
+const RE_RECENT = /^\\Recent$/i;
+function isNotEmptyOrRecent(str) {
+  var s = str.trim();
+  return s.length > 0 && !RE_RECENT.test(s);
 }
 
 function escape(str) {
@@ -18724,6 +18758,7 @@ function ImapProber(credentials, connInfo, _LOG) {
 
   this.onresult = null;
   this.error = null;
+  this.errorDetails = { server: connInfo.hostname };
 }
 exports.ImapProber = ImapProber;
 ImapProber.prototype = {
@@ -18759,30 +18794,9 @@ ImapProber.prototype = {
       return;
     console.warn('PROBE:IMAP sad', err);
 
-    switch (err.type) {
-      case 'NO':
-      case 'no':
-        if (!err.serverResponse)
-          this.error = 'unknown';
-        else if (err.serverResponse.indexOf(
-            '[ALERT] Application-specific password required') != -1)
-          this.error = 'needs-app-pass';
-        else if (err.serverResponse.indexOf(
-            '[ALERT] Your account is not enabled for IMAP use.') != -1)
-          this.error = 'imap-disabled';
-        else
-          this.error = 'bad-user-or-pass';
-        break;
-      case 'timeout':
-        this.error = 'timeout';
-        break;
-      // XXX we currently don't have a string for server maintenance, so go
-      // with unknown.  But it's also a very unlikely thing.
-      case 'server-maintenance':
-      default:
-        this.error = 'unknown';
-        break;
-    }
+    var normErr = normalizeError(err);
+    this.error = normErr.name;
+
     // we really want to make sure we clean up after this dude.
     try {
       this._conn.die();
@@ -18791,10 +18805,108 @@ ImapProber.prototype = {
     }
     this._conn = null;
 
-    this.onresult(this.error, null);
+    this.onresult(this.error, null, this.errorDetails);
     // we could potentially see many errors...
     this.onresult = false;
   },
+};
+
+/**
+ * Convert error objects from the IMAP connection to our internal error codes
+ * as defined in `MailApi.js` for tryToCreateAccount.  This is used by the
+ * probe during account creation and by `ImapAccount` during general connection
+ * establishment.
+ *
+ * @return[@dict[
+ *   @key[name String]
+ *   @key[reachable Boolean]{
+ *     Does this error indicate the server was reachable?  This is to be
+ *     reported to the `BackoffEndpoint`.
+ *   }
+ *   @key[retry Boolean]{
+ *     Should we retry the connection?  The answer is no for persistent problems
+ *     or transient problems that are expected to be longer lived than the scale
+ *     of our automatic retries.
+ *   }
+ *   @key[reportProblem Boolean]{
+ *     Should we report this as a problem on the account?  We should do this
+ *     if we expect this to be a persistent problem that requires user action
+ *     to resolve and we expect `MailUniverse.__reportAccountProblem` to
+ *     generate a specific user notification for the error.  If we're not going
+ *     to bother the user with a popup, then we probably want to return false
+ *     for this and leave it for the connection failure to cause the
+ *     `BackoffEndpoint` to cause a problem to be logged via the listener
+ *     mechanism.
+ *   }
+ * ]]
+ */
+var normalizeError = exports.normalizeError = function normalizeError(err) {
+  var errName, reachable = false, retry = true, reportProblem = false;
+  // We want to produce error-codes as defined in `MailApi.js` for
+  // tryToCreateAccount.  We have also tried to make imap.js produce
+  // error codes of the right type already, but for various generic paths
+  // (like saying 'NO'), there isn't currently a good spot for that.
+  switch (err.type) {
+    // dovecot says after a delay and does not terminate the connection:
+    //   NO [AUTHENTICATIONFAILED] Authentication failed.
+    // zimbra 7.2.x says after a delay and DOES terminate the connection:
+    //   NO LOGIN failed
+    //   * BYE Zimbra IMAP server terminating connection
+    // yahoo says after a delay and does not terminate the connection:
+    //   NO [AUTHENTICATIONFAILED] Incorrect username or password.
+  case 'NO':
+  case 'no':
+    reachable = true;
+    if (!err.serverResponse) {
+      errName = 'unknown';
+      reportProblem = false;
+    }
+    else {
+      // All of these require user action to resolve.
+      reportProblem = true;
+      retry = false;
+      if (err.serverResponse.indexOf(
+        '[ALERT] Application-specific password required') !== -1)
+        errName = 'needs-app-pass';
+      else if (err.serverResponse.indexOf(
+            '[ALERT] Your account is not enabled for IMAP use.') !== -1 ||
+          err.serverResponse.indexOf(
+            '[ALERT] IMAP access is disabled for your domain.') !== -1)
+        errName = 'imap-disabled';
+      else
+        errName = 'bad-user-or-pass';
+    }
+    break;
+  case 'server-maintenance':
+    errName = err.type;
+    reachable = true;
+    // do retry
+    break;
+  // An SSL error is either something we just want to report (probe), or
+  // something that is currently probably best treated as a network failure.  We
+  // could tell the user they may be experiencing a MITM attack, but that's not
+  // really something they can do anything about and we have protected them from
+  // it currently.
+  case 'bad-security':
+    errName = err.type;
+    reachable = true;
+    retry = false;
+    break;
+  case 'unresponsive-server':
+  case 'timeout':
+    errName = 'unresponsive-server';
+    break;
+  default:
+    errName = 'unknown';
+    break;
+  }
+
+  return {
+    name: errName,
+    reachable: reachable,
+    retry: retry,
+    reportProblem: reportProblem,
+  };
 };
 
 
@@ -18805,6 +18917,26 @@ ImapProber.prototype = {
  * XXX DST issue, maybe vary this.
  */
 const DEFAULT_TZ_OFFSET = -7 * 60 * 60 * 1000;
+
+var extractTZFromHeaders = exports._extractTZFromHeaders =
+    function extractTZFromHeaders(allHeaders) {
+  for (var i = 0; i < allHeaders.length; i++) {
+    var hpair = allHeaders[i];
+    if (hpair.key !== 'received')
+      continue;
+    var tzMatch = /([+-]\d{4})/.exec(hpair.value);
+    if (tzMatch) {
+      var tz =
+        parseInt(tzMatch[1].substring(1, 3), 10) * 60 * 60 * 1000 +
+        parseInt(tzMatch[1].substring(3, 5), 10) * 60 * 1000;
+      if (tzMatch[1].substring(0, 1) === '-')
+        tz *= -1;
+      return tz;
+    }
+  }
+
+  return null;
+};
 
 /**
  * Try and infer the current effective timezone of the server by grabbing the
@@ -18854,21 +18986,10 @@ var getTZOffset = exports.getTZOffset = function getTZOffset(conn, callback) {
       });
     fetcher.on('message', function onMsg(msg) {
         msg.on('end', function onMsgEnd() {
-            var allHeaders = msg.msg.headers;
-            for (var i = 0; i < allHeaders.length; i++) {
-              var hpair = allHeaders[i];
-              if (hpair.key !== 'received')
-                continue;
-              var tzMatch = /([+-]\d{4})/.exec(hpair.value);
-              if (tzMatch) {
-                var tz =
-                  parseInt(tzMatch[1].substring(1, 3)) * 60 * 60 * 1000+
-                  parseInt(tzMatch[1].substring(3, 5)) * 60 * 1000;
-                if (tzMatch[1].substring(0, 1) === '-')
-                  tz *= -1;
-                callback(null, tz);
-                return;
-              }
+            var tz = extractTZFromHeaders(msg.msg.headers);
+            if (tz !== null) {
+              callback(null, tz);
+              return;
             }
             // If we are here, the message somehow did not have a Received
             // header.  Try again with another known UID or fail out if we
@@ -18927,9 +19048,13 @@ function NetSocket(port, host, crypto) {
   this._actualSock.onerror = this._onerror.bind(this);
   this._actualSock.ondata = this._ondata.bind(this);
   this._actualSock.onclose = this._onclose.bind(this);
+
+  this.destroyed = false;
 }
 exports.NetSocket = NetSocket;
 util.inherits(NetSocket, EventEmitter);
+NetSocket.prototype.setTimeout = function() {
+};
 NetSocket.prototype.setKeepAlive = function(shouldKeepAlive) {
 };
 NetSocket.prototype.write = function(buffer) {
@@ -18937,6 +19062,7 @@ NetSocket.prototype.write = function(buffer) {
 };
 NetSocket.prototype.end = function() {
   this._actualSock.close();
+  this.destroyed = true;
 };
 
 NetSocket.prototype._onconnect = function(event) {
@@ -19116,7 +19242,10 @@ function pipe(pair, socket) {
     return cleartext;
 }
 });
-define('simplesmtp/lib/client',['require','exports','module','stream','util','net','tls','os','./starttls'],function (require, exports, module) {
+define('xoauth2',['require','exports','module'],function(require, exports, module) {
+});
+
+define('simplesmtp/lib/client',['require','exports','module','stream','util','net','tls','os','./starttls','xoauth2','crypto'],function (require, exports, module) {
 // TODO:
 // * Lisada timeout serveri ühenduse jaoks
 
@@ -19125,7 +19254,9 @@ var Stream = require('stream').Stream,
     net = require('net'),
     tls = require('tls'),
     oslib = require('os'),
-    starttls = require('./starttls').starttls;
+    starttls = require('./starttls').starttls,
+    xoauth2 = require('xoauth2'),
+    crypto = require('crypto');
 
 // monkey patch net and tls to support nodejs 0.4
 if(!net.connect && net.createConnection){
@@ -19145,7 +19276,7 @@ module.exports = function(port, host, options){
 
 /**
  * <p>Generates a SMTP connection object</p>
- *
+ * 
  * <p>Optional options object takes the following possible properties:</p>
  * <ul>
  *     <li><b>secureConnection</b> - use SSL</li>
@@ -19155,7 +19286,7 @@ module.exports = function(port, host, options){
  *     <li><b>debug</b> - output client and server messages to console</li>
  *     <li><b>instanceId</b> - unique instance id for debugging</li>
  * </ul>
- *
+ * 
  * @constructor
  * @namespace SMTP Client module
  * @param {Number} [port=25] Port number to connect to
@@ -19166,16 +19297,16 @@ function SMTPClient(port, host, options){
     Stream.call(this);
     this.writable = true;
     this.readable = true;
-
+    
     this.options = options || {};
-
+    
     this.port = port || (this.options.secureConnection ? 465 : 25);
     this.host = host || "localhost";
-
+    
     this.options.secureConnection = !!this.options.secureConnection;
     this.options.auth = this.options.auth || false;
     this.options.maxConnections = this.options.maxConnections || 5;
-
+    
     if(!this.options.name){
         // defaul hostname is machine hostname or [IP]
         var defaultHostname = (oslib.hostname && oslib.hostname()) ||
@@ -19187,10 +19318,10 @@ function SMTPClient(port, host, options){
         if(defaultHostname.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)){
             defaultHostname = "["+defaultHostname+"]";
         }
-
+        
         this.options.name = defaultHostname;
     }
-
+    
     this._init();
 }
 utillib.inherits(SMTPClient, Stream);
@@ -19200,56 +19331,77 @@ utillib.inherits(SMTPClient, Stream);
  */
 SMTPClient.prototype._init = function(){
     /**
-     * Defines if the current connection is secure or not. If not,
+     * Defines if the current connection is secure or not. If not, 
      * STARTTLS can be used if available
      * @private
      */
     this._secureMode = false;
-
+    
     /**
      * Ignore incoming data on TLS negotiation
      * @private
      */
     this._ignoreData = false;
+    
+    /**
+     * Store incomplete messages coming from the server
+     * @private
+     */
+    this._remainder = "";
 
     /**
      * If set to true, then this object is no longer active
-     * @private
+     * @private 
      */
     this.destroyed = false;
-
+    
     /**
      * The socket connecting to the server
      * @publick
      */
     this.socket = false;
-
+    
     /**
      * Lists supported auth mechanisms
      * @private
      */
     this._supportedAuth = [];
-
+    
     /**
      * Currently in data transfer state
      * @private
      */
     this._dataMode = false;
-
+    
     /**
-     * Keep track if the client sends a leading \r\n in data mode
+     * Keep track if the client sends a leading \r\n in data mode 
      * @private
      */
     this._lastDataBytes = new Buffer(2);
-
+    
     /**
      * Function to run if a data chunk comes from the server
      * @private
      */
     this._currentAction = false;
-
+    
     if(this.options.ignoreTLS || this.options.secureConnection){
         this._secureMode = true;
+    }
+
+    /**
+     * XOAuth2 token generator if XOAUTH2 auth is used
+     * @private
+     */
+    this._xoauth2 = false;
+
+    if(typeof this.options.auth.XOAuth2 == "object" && typeof this.options.auth.XOAuth2.getToken == "function"){
+        this._xoauth2 = this.options.auth.XOAuth2;
+    }else if(typeof this.options.auth.XOAuth2 == "object"){
+        if(!this.options.auth.XOAuth2.user && this.options.auth.user){
+            this.options.auth.XOAuth2.user = this.options.auth.user;
+        }
+        this._xoauth2 = xoauth2.createXOAuth2Generator(this.options.auth.XOAuth2);
     }
 };
 
@@ -19265,13 +19417,13 @@ SMTPClient.prototype.connect = function(){
         this.socket = net.connect(this.port, this.host);
         this.socket.on("connect", this._onConnect.bind(this));
     }
-
+    
     this.socket.on("error", this._onError.bind(this));
 };
 
 /**
  * <p>Upgrades the connection to TLS</p>
- *
+ * 
  * @param {Function} callback Callbac function to run when the connection
  *        has been secured
  */
@@ -19282,15 +19434,15 @@ SMTPClient.prototype._upgradeConnection = function(callback){
         this._ignoreData = false;
         this._secureMode = true;
         this.socket.on("data", this._onData.bind(this));
-
+            
         return callback(null, true);
     }).bind(this));
 };
 
 /**
- * <p>Connection listener that is run when the connection to
+ * <p>Connection listener that is run when the connection to 
  * the server is opened</p>
- *
+ * 
  * @event
  */
 SMTPClient.prototype._onConnect = function(){
@@ -19299,11 +19451,14 @@ SMTPClient.prototype._onConnect = function(){
     }else if(this.socket.encrypted && "setKeepAlive" in this.socket.encrypted){
         this.socket.encrypted.setKeepAlive(true); // secure connection
     }
-
+    
     this.socket.on("data", this._onData.bind(this));
     this.socket.on("close", this._onClose.bind(this));
     this.socket.on("end", this._onEnd.bind(this));
 
+    this.socket.setTimeout(3 * 3600 * 1000); // 1 hours
+    this.socket.on("timeout", this._onTimeout.bind(this));
+    
     this._currentAction = this._actionGreeting;
 };
 
@@ -19319,22 +19474,31 @@ SMTPClient.prototype._destroy = function(){
 
 /**
  * <p>'data' listener for data coming from the server</p>
- *
+ * 
  * @event
  * @param {Buffer} chunk Data chunk coming from the server
  */
 SMTPClient.prototype._onData = function(chunk){
-    if(this._ignoreData){
+    var str;
+
+    if(this._ignoreData || !chunk || !chunk.length){
         return;
     }
 
-    var str = chunk.toString().trim();
+    // Wait until end of line
+    if(chunk[chunk.length-1] != 0x0A){
+        this._remainder += chunk.toString();
+        return;
+    }else{
+        str = (this._remainder + chunk.toString()).trim();
+        this._remainder = "";
+    }
 
     if(this.options.debug){
         console.log("SERVER"+(this.options.instanceId?" "+
-            this.options.instanceId:"")+":\n   "+str.replace(/\n/g,"\n   "));
+            this.options.instanceId:"")+":\n└──"+str.replace(/\r?\n/g,"\n   "));
     }
-
+    
     if(typeof this._currentAction == "function"){
         this._currentAction.call(this, str);
     }
@@ -19342,7 +19506,7 @@ SMTPClient.prototype._onData = function(chunk){
 
 /**
  * <p>'error' listener for the socket</p>
- *
+ * 
  * @event
  * @param {Error} err Error object
  * @param {String} type Error name
@@ -19360,7 +19524,7 @@ SMTPClient.prototype._onError = function(err, type, data){
 
 /**
  * <p>'close' listener for the socket</p>
- *
+ * 
  * @event
  */
 SMTPClient.prototype._onClose = function(){
@@ -19369,7 +19533,7 @@ SMTPClient.prototype._onClose = function(){
 
 /**
  * <p>'end' listener for the socket</p>
- *
+ * 
  * @event
  */
 SMTPClient.prototype._onEnd = function(){
@@ -19377,8 +19541,17 @@ SMTPClient.prototype._onEnd = function(){
 };
 
 /**
+ * <p>'timeout' listener for the socket</p>
+ * 
+ * @event
+ */
+SMTPClient.prototype._onTimeout = function(){
+    this.close();
+};
+
+/**
  * <p>Passes data stream to socket if in data mode</p>
- *
+ * 
  * @param {Buffer} chunk Chunk of data to be sent to the server
  */
 SMTPClient.prototype.write = function(chunk){
@@ -19388,11 +19561,11 @@ SMTPClient.prototype.write = function(chunk){
         // say act like everything's normal.
         return true;
     }
-
+    
     if(typeof chunk == "string"){
         chunk = new Buffer(chunk, "utf-8");
     }
-
+    
     if(chunk.length > 2){
         this._lastDataBytes[0] = chunk[chunk.length-2];
         this._lastDataBytes[1] = chunk[chunk.length-1];
@@ -19400,12 +19573,12 @@ SMTPClient.prototype.write = function(chunk){
         this._lastDataBytes[0] = this._lastDataBytes[1];
         this._lastDataBytes[1] = chunk[0];
     }
-
+    
     if(this.options.debug){
         console.log("CLIENT (DATA)"+(this.options.instanceId?" "+
-            this.options.instanceId:"")+":\n   "+chunk.toString().trim().replace(/\n/g,"\n   "));
+            this.options.instanceId:"")+":\n└──"+chunk.toString().trim().replace(/\n/g,"\n   "));
     }
-
+    
     // pass the chunk to the socket
     return this.socket.write(chunk);
 };
@@ -19413,7 +19586,7 @@ SMTPClient.prototype.write = function(chunk){
 /**
  * <p>Indicates that a data stream for the socket is ended. Works only
  * in data mode.</p>
- *
+ * 
  * @param {Buffer} [chunk] Chunk of data to be sent to the server
  */
 SMTPClient.prototype.end = function(chunk){
@@ -19423,7 +19596,7 @@ SMTPClient.prototype.end = function(chunk){
         // say act like everything's normal.
         return true;
     }
-
+    
     if(chunk && chunk.length){
         this.write(chunk);
     }
@@ -19432,7 +19605,7 @@ SMTPClient.prototype.end = function(chunk){
     this._currentAction = this._actionStream;
 
     // indicate that the stream has ended by sending a single dot on its own line
-    // if the client already closed the data with \r\n no need to do it again
+    // if the client already closed the data with \r\n no need to do it again 
     if(this._lastDataBytes[0] == 0x0D && this._lastDataBytes[1] == 0x0A){
         this.socket.write(new Buffer(".\r\n", "utf-8"));
     }else if(this._lastDataBytes[1] == 0x0D){
@@ -19440,20 +19613,20 @@ SMTPClient.prototype.end = function(chunk){
     }else{
         this.socket.write(new Buffer("\r\n.\r\n"));
     }
-
-    // end data mode
+    
+    // end data mode    
     this._dataMode = false;
 };
 
 /**
  * <p>Send a command to the server, append \r\n</p>
- *
+ * 
  * @param {String} str String to be sent to the server
  */
 SMTPClient.prototype.sendCommand = function(str){
     if(this.options.debug){
         console.log("CLIENT"+(this.options.instanceId?" "+
-            this.options.instanceId:"")+":\n   "+(str || "").toString().trim().replace(/\n/g,"\n   "));
+            this.options.instanceId:"")+":\n└──"+(str || "").toString().trim().replace(/\n/g,"\n   "));
     }
     this.socket.write(new Buffer(str+"\r\n", "utf-8"));
 };
@@ -19473,7 +19646,10 @@ SMTPClient.prototype.close = function(){
     if(this.options.debug){
         console.log("Closing connection to the server");
     }
-    if(this.socket && !this.socket.destroyed){
+    if(this.socket && this.socket.socket && this.socket.socket.end && !this.socket.socket.destroyed){
+        this.socket.socket.end();
+    }
+    if(this.socket && this.socket.end && !this.socket.destroyed){
         this.socket.end();
     }
     this._destroy();
@@ -19482,18 +19658,18 @@ SMTPClient.prototype.close = function(){
 /**
  * <p>Initiates a new message by submitting envelope data, starting with
  * <code>MAIL FROM:</code> command</p>
- *
- * @param {Object} envelope Envelope object in the form of
+ * 
+ * @param {Object} envelope Envelope object in the form of 
  *        <code>{from:"...", to:["..."]}</code>
  */
 SMTPClient.prototype.useEnvelope = function(envelope){
     this._envelope = envelope || {};
     this._envelope.from = this._envelope.from || ("anonymous@"+this.options.name);
-
+    
     // clone the recipients array for latter manipulation
     this._envelope.rcptQueue = JSON.parse(JSON.stringify(this._envelope.to || []));
     this._envelope.rcptFailed = [];
-
+    
     this._currentAction = this._actionMAIL;
     this.sendCommand("MAIL FROM:<"+(this._envelope.from)+">");
 };
@@ -19503,27 +19679,30 @@ SMTPClient.prototype.useEnvelope = function(envelope){
  * indicate that this client is ready to take in an outgoing mail</p>
  */
 SMTPClient.prototype._authenticateUser = function(){
-
+    
     if(!this.options.auth){
         // no need to authenticate, at least no data given
         this._currentAction = this._actionIdle;
         this.emit("idle"); // ready to take orders
         return;
     }
-
+    
     var auth;
-
     if(this.options.auth.XOAuthToken && this._supportedAuth.indexOf("XOAUTH")>=0){
         auth = "XOAUTH";
+    }else if(this._xoauth2 && this._supportedAuth.indexOf("XOAUTH2")>=0){
+        auth = "XOAUTH2";
+    }else if(this.options.authMethod) {
+        auth = this.options.authMethod.toUpperCase().trim();
     }else{
         // use first supported
         auth = (this._supportedAuth[0] || "PLAIN").toUpperCase().trim();
     }
-
+    
     switch(auth){
         case "XOAUTH":
             this._currentAction = this._actionAUTHComplete;
-
+            
             if(typeof this.options.auth.XOAuthToken == "object" &&
               typeof this.options.auth.XOAuthToken.generate == "function"){
                 this.options.auth.XOAuthToken.generate((function(err, XOAuthToken){
@@ -19536,6 +19715,16 @@ SMTPClient.prototype._authenticateUser = function(){
                 this.sendCommand("AUTH XOAUTH " + this.options.auth.XOAuthToken.toString());
             }
             return;
+        case "XOAUTH2":
+            this._currentAction = this._actionAUTHComplete;
+            this._xoauth2.getToken((function(err, token){
+                if(err){
+                    this._onError(err, "XOAUTH2Error");
+                    return;
+                }
+                this.sendCommand("AUTH XOAUTH2 " + token);
+            }).bind(this));
+            return;
         case "LOGIN":
             this._currentAction = this._actionAUTH_LOGIN_USER;
             this.sendCommand("AUTH LOGIN");
@@ -19547,8 +19736,12 @@ SMTPClient.prototype._authenticateUser = function(){
                     this.options.auth.user+"\u0000"+
                     this.options.auth.pass,"utf-8").toString("base64"));
             return;
+        case "CRAM-MD5":
+            this._currentAction = this._actionAUTH_CRAM_MD5;
+            this.sendCommand("AUTH CRAM-MD5");
+            return;
     }
-
+    
     this._onError(new Error("Unknown authentication method - "+auth), "UnknowAuthError");
 };
 
@@ -19558,7 +19751,7 @@ SMTPClient.prototype._authenticateUser = function(){
  * <p>Will be run after the connection is created and the server sends
  * a greeting. If the incoming message starts with 220 initiate
  * SMTP session by sending EHLO command</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionGreeting = function(str){
@@ -19566,7 +19759,7 @@ SMTPClient.prototype._actionGreeting = function(str){
         this._onError(new Error("Invalid greeting from server - "+str), false, str);
         return;
     }
-
+    
     this._currentAction = this._actionEHLO;
     this.sendCommand("EHLO "+this.options.name);
 };
@@ -19576,7 +19769,7 @@ SMTPClient.prototype._actionGreeting = function(str){
  * error, try HELO instead, otherwise initiate TLS negotiation
  * if STARTTLS is supported by the server or move into the
  * authentication phase.</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionEHLO = function(str){
@@ -19586,36 +19779,46 @@ SMTPClient.prototype._actionEHLO = function(str){
         this.sendCommand("HELO "+this.options.name);
         return;
     }
-
+    
     // Detect if the server supports STARTTLS
     if(!this._secureMode && str.match(/[ \-]STARTTLS\r?$/mi)){
         this.sendCommand("STARTTLS");
         this._currentAction = this._actionSTARTTLS;
-        return;
+        return; 
     }
-
+    
     // Detect if the server supports PLAIN auth
     if(str.match(/AUTH(?:\s+[^\n]*\s+|\s+)PLAIN/i)){
         this._supportedAuth.push("PLAIN");
     }
-
+    
     // Detect if the server supports LOGIN auth
     if(str.match(/AUTH(?:\s+[^\n]*\s+|\s+)LOGIN/i)){
         this._supportedAuth.push("LOGIN");
     }
+    
+    // Detect if the server supports CRAM-MD5 auth
+    if(str.match(/AUTH(?:\s+[^\n]*\s+|\s+)CRAM-MD5/i)){
+        this._supportedAuth.push("CRAM-MD5");
+    }
 
-    // Detect if the server supports LOGIN auth
+    // Detect if the server supports XOAUTH auth
     if(str.match(/AUTH(?:\s+[^\n]*\s+|\s+)XOAUTH/i)){
         this._supportedAuth.push("XOAUTH");
     }
 
+    // Detect if the server supports XOAUTH2 auth
+    if(str.match(/AUTH(?:\s+[^\n]*\s+|\s+)XOAUTH2/i)){
+        this._supportedAuth.push("XOAUTH2");
+    }
+    
     this._authenticateUser.call(this);
 };
 
 /**
  * <p>Handles server response for HELO command. If it yielded in
  * error, emit 'error', otherwise move into the authentication phase.</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionHELO = function(str){
@@ -19630,7 +19833,7 @@ SMTPClient.prototype._actionHELO = function(str){
  * <p>Handles server response for STARTTLS command. If there's an error
  * try HELO instead, otherwise initiate TLS upgrade. If the upgrade
  * succeedes restart the EHLO</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionSTARTTLS = function(str){
@@ -19640,7 +19843,7 @@ SMTPClient.prototype._actionSTARTTLS = function(str){
         this.sendCommand("HELO "+this.options.name);
         return;
     }
-
+    
     this._upgradeConnection((function(err, secured){
         if(err){
             this._onError(new Error("Error initiating TLS - "+(err.message || err)), "TLSError");
@@ -19649,7 +19852,7 @@ SMTPClient.prototype._actionSTARTTLS = function(str){
         if(this.options.debug){
             console.log("Connection secured");
         }
-
+        
         if(secured){
             // restart session
             this._currentAction = this._actionEHLO;
@@ -19664,7 +19867,7 @@ SMTPClient.prototype._actionSTARTTLS = function(str){
  * <p>Handle the response for AUTH LOGIN command. We are expecting
  * '334 VXNlcm5hbWU6' (base64 for 'Username:'). Data to be sent as
  * response needs to be base64 encoded username.</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionAUTH_LOGIN_USER = function(str){
@@ -19678,10 +19881,58 @@ SMTPClient.prototype._actionAUTH_LOGIN_USER = function(str){
 };
 
 /**
+ * <p>Handle the response for AUTH CRAM-MD5 command. We are expecting
+ * '334 <challenge string>'. Data to be sent as response needs to be
+ * base64 decoded challenge string, MD5 hashed using the password as
+ * a HMAC key, prefixed by the username and a space, and finally all
+ * base64 encoded again.</p>
+ *
+ * @param {String} str Message from the server
+ */
+SMTPClient.prototype._actionAUTH_CRAM_MD5 = function(str) {
+	var challengeMatch = str.match(/^334\s+(.+)$/),
+		challengeString = "";
+
+	if (!challengeMatch) {
+		this._onError(new Error("Invalid login sequence while waiting for server challenge string - "+str), false, str);
+		return;
+	} else {
+		challengeString = challengeMatch[1];
+	}
+
+	// Decode from base64
+	var base64decoded = new Buffer(challengeString, 'base64').toString('ascii'),
+		hmac_md5 = crypto.createHmac('md5', this.options.auth.pass);
+	hmac_md5.update(base64decoded);
+	var hex_hmac = hmac_md5.digest('hex'),
+		prepended = this.options.auth.user + " " + hex_hmac;
+
+    this._currentAction = this._actionAUTH_CRAM_MD5_PASS;
+
+	this.sendCommand(new Buffer(prepended).toString("base64"));
+};
+
+/**
+ * <p>Handles the response to CRAM-MD5 authentication, if there's no error,
+ * the user can be considered logged in. Emit 'idle' and start
+ * waiting for a message to send</p>
+ *
+ * @param {String} str Message from the server
+ */
+SMTPClient.prototype._actionAUTH_CRAM_MD5_PASS = function(str) {
+	if (!str.match(/^235\s+/)) {
+	    this._onError(new Error("Invalid login sequence while waiting for '235 go ahead' - "+str), false, str);
+	    return;
+	}
+	this._currentAction = this._actionIdle;
+	this.emit("idle"); // ready to take orders
+};
+
+/**
  * <p>Handle the response for AUTH LOGIN command. We are expecting
  * '334 UGFzc3dvcmQ6' (base64 for 'Password:'). Data to be sent as
  * response needs to be base64 encoded password.</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionAUTH_LOGIN_PASS = function(str){
@@ -19697,23 +19948,57 @@ SMTPClient.prototype._actionAUTH_LOGIN_PASS = function(str){
  * <p>Handles the response for authentication, if there's no error,
  * the user can be considered logged in. Emit 'idle' and start
  * waiting for a message to send</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionAUTHComplete = function(str){
+    var response;
+
+    if(this._xoauth2 && str.substr(0, 3) == "334"){
+        try{
+            response = str.split(" ");
+            response.shift();
+            response = JSON.parse(new Buffer(response.join(" "), "base64").toString("utf-8"));
+
+            if((!this._xoauth2.reconnectCount || this._xoauth2.reconnectCount < 2) && ['400','401'].indexOf(response.status)>=0){
+                this._xoauth2.reconnectCount = (this._xoauth2.reconnectCount || 0) + 1;
+                this._currentAction = this._actionXOAUTHRetry;
+            }else{
+                this._xoauth2.reconnectCount = 0;
+                this._currentAction = this._actionAUTHComplete;
+            }
+            this.sendCommand(new Buffer(0));
+            return;
+
+        }catch(E){}
+    }
+
+    this._xoauth2.reconnectCount = 0;
+
     if(str.charAt(0) != "2"){
         this._onError(new Error("Invalid login - "+str), "AuthError", str);
         return;
     }
-
+    
     this._currentAction = this._actionIdle;
     this.emit("idle"); // ready to take orders
 };
 
+SMTPClient.prototype._actionXOAUTHRetry = function(str){
+    this._xoauth2.generateToken((function(err, token){
+        if(err){
+            this._onError(err, "XOAUTH2Error");
+            return;
+        }
+        this._currentAction = this._actionAUTHComplete;
+        this.sendCommand("AUTH XOAUTH2 " + token);
+    }).bind(this));
+}
+
 /**
  * <p>This function is not expected to run. If it does then there's probably
  * an error (timeout etc.)</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionIdle = function(str){
@@ -19721,13 +20006,13 @@ SMTPClient.prototype._actionIdle = function(str){
         this._onError(new Error(str), false, str);
         return;
     }
-
+    
     // this line should never get called
 };
 
 /**
  * <p>Handle response for a <code>MAIL FROM:</code> command</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionMAIL = function(str){
@@ -19735,7 +20020,7 @@ SMTPClient.prototype._actionMAIL = function(str){
         this._onError(new Error("Mail from command failed - " + str), "SenderError", str);
         return;
     }
-
+    
     if(!this._envelope.rcptQueue.length){
         this._onError(new Error("Can't send mail - no recipients defined"), "RecipientError");
     }else{
@@ -19747,7 +20032,7 @@ SMTPClient.prototype._actionMAIL = function(str){
 
 /**
  * <p>Handle response for a <code>RCPT TO:</code> command</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionRCPT = function(str){
@@ -19755,7 +20040,7 @@ SMTPClient.prototype._actionRCPT = function(str){
         // this is a soft error
         this._envelope.rcptFailed.push(this._envelope.curRecipient);
     }
-
+    
     if(!this._envelope.rcptQueue.length){
         if(this._envelope.rcptFailed.length < this._envelope.to.length){
             this.emit("rcptFailed", this._envelope.rcptFailed);
@@ -19774,7 +20059,7 @@ SMTPClient.prototype._actionRCPT = function(str){
 
 /**
  * <p>Handle response for a <code>DATA</code> command</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionDATA = function(str){
@@ -19784,7 +20069,7 @@ SMTPClient.prototype._actionDATA = function(str){
         this._onError(new Error("Data command failed - " + str), false, str);
         return;
     }
-
+    
     // Emit that connection is set up for streaming
     this._dataMode = true;
     this._currentAction = this._actionIdle;
@@ -19793,7 +20078,7 @@ SMTPClient.prototype._actionDATA = function(str){
 
 /**
  * <p>Handle response for a <code>DATA</code> stream</p>
- *
+ * 
  * @param {String} str Message from the server
  */
 SMTPClient.prototype._actionStream = function(str){
@@ -19804,7 +20089,7 @@ SMTPClient.prototype._actionStream = function(str){
         // Message sent succesfully
         this.emit("ready", true, str);
     }
-
+    
     // Waiting for new connections
     this._currentAction = this._actionIdle;
     process.nextTick(this.emit.bind(this, "idle"));
@@ -19812,7 +20097,7 @@ SMTPClient.prototype._actionStream = function(str){
 
 });
 /**
- *
+ * SMTP probe logic.
  **/
 
 define('mailapi/smtp/probe',
@@ -19825,6 +20110,33 @@ define('mailapi/smtp/probe',
     exports
   ) {
 
+var setTimeoutFunc = window.setTimeout.bind(window),
+    clearTimeoutFunc = window.clearTimeout.bind(window);
+
+exports.TEST_useTimeoutFuncs = function(setFunc, clearFunc) {
+  setTimeoutFunc = setFunc;
+  clearTimeoutFunc = clearFunc;
+};
+
+exports.TEST_USE_DEBUG_MODE = false;
+
+/**
+ * How many milliseconds should we wait before giving up on the connection?
+ *
+ * I have a whole essay on the rationale for this in the IMAP prober.  Us, we
+ * just want to use the same value as the IMAP prober.  This is a candidate for
+ * centralization.
+ */
+exports.CONNECT_TIMEOUT_MS = 30000;
+
+/**
+ * Validate that we find an SMTP server using the connection info and that it
+ * seems to like our credentials.
+ *
+ * Because the SMTP client has no connection timeout support, use our own timer
+ * to decide when to give up on the SMTP connection.  We use the timer for the
+ * whole process, including even after the connection is established.
+ */
 function SmtpProber(credentials, connInfo) {
   console.log("PROBE:SMTP attempting to connect to", connInfo.hostname);
   this._conn = $simplesmtp(
@@ -19833,35 +20145,56 @@ function SmtpProber(credentials, connInfo) {
       secureConnection: connInfo.crypto === true,
       ignoreTLS: connInfo.crypto === false,
       auth: { user: credentials.username, pass: credentials.password },
-      debug: false,
+      debug: exports.TEST_USE_DEBUG_MODE,
     });
-  this._conn.on('idle', this.onIdle.bind(this));
-  this._conn.on('error', this.onBadness.bind(this));
-  this._conn.on('end', this.onBadness.bind(this));
+  // onIdle happens after successful login, and so is what our probing uses.
+  this._conn.on('idle', this.onResult.bind(this, null));
+  this._conn.on('error', this.onResult.bind(this));
+  this._conn.on('end', this.onResult.bind(this, 'unknown'));
+
+  this.timeoutId = setTimeoutFunc(
+                     this.onResult.bind(this, 'unresponsive-server'),
+                     exports.CONNECT_TIMEOUT_MS);
 
   this.onresult = null;
+  this.error = null;
+  this.errorDetails = { server: connInfo.hostname };
 }
 exports.SmtpProber = SmtpProber;
 SmtpProber.prototype = {
-  /**
-   * onIdle happens after successful login, and so is what our probing uses.
-   */
-  onIdle: function() {
-    console.log('onIdle!');
-    if (this.onresult) {
-      console.log('PROBE:SMTP happy');
-      this.onresult(true);
-      this.onresult = null;
+  onResult: function(err) {
+    if (!this.onresult)
+      return;
+    if (err && typeof(err) === 'object') {
+      // detect an nsISSLStatus instance by an unusual property.
+      if ('isNotValidAtThisTime' in err) {
+        err = 'bad-security';
+      }
+      else {
+        switch (err.name) {
+          case 'AuthError':
+            err = 'bad-user-or-pass';
+            break;
+          case 'UnknownAuthError':
+          default:
+            err = 'server-problem';
+            break;
+        }
+      }
     }
-    this._conn.close();
-  },
 
-  onBadness: function(err) {
-    if (this.onresult) {
+    this.error = err;
+    if (err)
       console.warn('PROBE:SMTP sad. error: |' + err + '|');
-      this.onresult(false);
-      this.onresult = null;
-    }
+    else
+      console.log('PROBE:SMTP happy');
+
+    clearTimeoutFunc(this.timeoutId);
+
+    this.onresult(this.error, this.errorDetails);
+    this.onresult = null;
+
+    this._conn.close();
   },
 };
 
@@ -23248,13 +23581,19 @@ function MailSlice(bridgeHandle, storage, _parentLog) {
 exports.MailSlice = MailSlice;
 MailSlice.prototype = {
   set atTop(val) {
-    this._bridgeHandle.atTop = val;
+    if (this._bridgeHandle)
+      this._bridgeHandle.atTop = val;
+    return val;
   },
   set atBottom(val) {
-    this._bridgeHandle.atBottom = val;
+    if (this._bridgeHandle)
+      this._bridgeHandle.atBottom = val;
+    return val;
   },
   set userCanGrowDownwards(val) {
-    this._bridgeHandle.userCanGrowDownwards = val;
+    if (this._bridgeHandle)
+      this._bridgeHandle.userCanGrowDownwards = val;
+    return val;
   },
 
   _updateSliceFlags: function() {
@@ -23283,6 +23622,9 @@ MailSlice.prototype = {
    * ]
    */
   _resetHeadersBecauseOfRefreshExplosion: function() {
+    if (!this._bridgeHandle)
+      return;
+
     if (this.headers.length) {
       // If we're accumulating, we were starting from zero to begin with, so
       // there is no need to send a nuking splice.
@@ -23305,6 +23647,9 @@ MailSlice.prototype = {
   },
 
   reqNoteRanges: function(firstIndex, firstSuid, lastIndex, lastSuid) {
+    if (!this._bridgeHandle)
+      return;
+
     var i;
     // - Fixup indices if required
     if (firstIndex >= this.headers.length ||
@@ -23412,6 +23757,9 @@ MailSlice.prototype = {
   },
 
   batchAppendHeaders: function(headers, insertAt, moreComing) {
+    if (!this._bridgeHandle)
+      return;
+
     this._LOG.headersAppended(headers);
     if (insertAt === -1)
       insertAt = this.headers.length;
@@ -24350,6 +24698,13 @@ FolderStorage.prototype = {
     }
   },
 
+  /**
+   * Split the contents of the given body block into a newer and older block.
+   * The newer info block will be mutated in place; the older block info will
+   * be created and returned.  The newer block is filled with data until it
+   * first overflows newerTargetBytes.  This method is responsible for updating
+   * the actual containing blocks as well.
+   */
   _splitBodyBlock: function ifs__splitBodyBlock(splinfo, splock,
                                                 newerTargetBytes) {
     // Save off the start timestamp/uid; these may have been extended beyond the
@@ -24358,23 +24713,29 @@ FolderStorage.prototype = {
     var savedStartTS = splinfo.startTS, savedStartUID = splinfo.startUID;
 
     var newerBytes = 0, uids = splock.uids, newDict = {}, oldDict = {},
-        inNew = true, numHeaders = null;
-    for (var i = 0; i < uids.length; i++) {
-      var uid = uids[i],
-          body = splock.bodies[uid];
-      if (inNew) {
-        newerBytes += body.size;
-        newDict[uid] = body;
-        if (newerBytes >= newerTargetBytes) {
-          inNew = false;
-          splinfo.count = numHeaders = i + 1;
-          splinfo.startTS = body.date;
-          splinfo.startUID = uid;
-        }
+        inNew = true, numHeaders = null, i, uid, body,
+        idxLast = uids.length - 1;
+    // loop for new traversal; picking a split-point so that there is at least
+    // one item in each block.
+    for (i = 0; i < idxLast; i++) {
+      uid = uids[i],
+      body = splock.bodies[uid];
+      newerBytes += body.size;
+      newDict[uid] = body;
+      if (newerBytes >= newerTargetBytes) {
+        i++;
+        break;
       }
-      else {
-        oldDict[uid] = body;
-      }
+    }
+    // mark the breakpoint; i is pointing at the first old-block message
+    splinfo.count = numHeaders = i;
+    // and these values are from the last processed new-block message
+    splinfo.startTS = body.date;
+    splinfo.startUID = uid;
+    // loop for old traversal
+    for (; i < uids.length; i++) {
+      uid = uids[i];
+      oldDict[uid] = splock.bodies[uid];
     }
 
     var oldEndUID = uids[numHeaders];
@@ -24382,6 +24743,8 @@ FolderStorage.prototype = {
       savedStartTS, savedStartUID,
       oldDict[oldEndUID].date, oldEndUID,
       splinfo.estSize - newerBytes,
+      // (the older block gets the uids the new/existing block does not want,
+      //  leaving `uids` containing only the d
       uids.splice(numHeaders, uids.length - numHeaders),
       oldDict);
     splinfo.estSize = newerBytes;
@@ -24967,7 +25330,7 @@ FolderStorage.prototype = {
       insertInBlock(thing, uid, info, block);
 
       // -- split if necessary
-      if (info.estSize >= MAX_BLOCK_SIZE) {
+      if (info.count > 1 && info.estSize >= MAX_BLOCK_SIZE) {
         // - figure the desired resulting sizes
         var firstBlockTarget;
         // big part to the center at the edges (favoring front edge)
@@ -25247,11 +25610,17 @@ FolderStorage.prototype = {
 
     var progressCallback = slice.setSyncProgress.bind(slice);
 
-    // If we're offline or the folder can't be synchronized right now, then
-    // there's nothing to look into; use the DB.
-    if (!this._account.universe.online ||
-        !this.folderSyncer.syncable) {
+    // If we're offline, then there's nothing to look into; use the DB.
+    if (!this._account.universe.online) {
       existingDataGood = true;
+    }
+    // If the folder can't be synchronized right now, just report the sync as
+    // blocked. We'll update it soon enough.
+    else if (!this.folderSyncer.syncable) {
+      console.log('Synchronization is currently blocked; waiting...');
+      slice.setStatus('syncblocked', false, true, false, 0.0);
+      releaseMutex();
+      return;
     }
     else if (this._accuracyRanges.length && !forceDeepening) {
       ainfo = this._accuracyRanges[0];
@@ -25648,7 +26017,13 @@ FolderStorage.prototype = {
     return syncTS;
   },
 
+  /**
+   * Are we synchronized as far back in time as we are able to synchronize?
+   */
   syncedToDawnOfTime: function() {
+    if (!this.folderSyncer.canGrowSync)
+      return true;
+
     var oldestSyncTS = this.getOldestFullSyncDate();
     return ON_OR_BEFORE(oldestSyncTS, $sync.OLDEST_SYNC_DATE);
   },
@@ -26340,6 +26715,19 @@ FolderStorage.prototype = {
       this._curSyncSlice.onHeaderAdded(header, true, false);
   },
 
+  hasMessageWithServerId: function(srvid) {
+    if (!this._serverIdHeaderBlockMapping)
+      throw new Error('Server ID mapping not supported for this storage!');
+
+    var blockId = this._serverIdHeaderBlockMapping[srvid];
+    if (srvid === undefined) {
+      this._LOG.serverIdMappingMissing(srvid);
+      return false;
+    }
+
+    return !!blockId;
+  },
+
   deleteMessageHeaderAndBody: function(header, callback) {
     if (this._pendingLoads.length) {
       this._deferredCalls.push(this.deleteMessageHeaderAndBody.bind(
@@ -26938,8 +27326,12 @@ exports.SubjectFilter = SubjectFilter;
 SubjectFilter.prototype = {
   needsBody: false,
   testMessage: function(header, body, match) {
+    const subject = header.subject;
+    // Empty subjects can't match *anything*; no empty regexes allowed, etc.
+    if (!subject)
+      return false;
     const phrase = this.phrase,
-          subject = header.subject, slen = subject.length,
+          slen = subject.length,
           stopAfter = this.stopAfter,
           contextBefore = this.contextBefore, contextAfter = this.contextAfter,
           matches = [];
@@ -27132,10 +27524,15 @@ MessageFilterer.prototype = {
     //            header.subject, 'body?', !!body, ')');
     var matched = false, matchObj = {};
     const filters = this.filters;
-    for (var i = 0; i < filters.length; i++) {
-      var filter = filters[i];
-      if (filter.testMessage(header, body, matchObj))
-        matched = true;
+    try {
+      for (var i = 0; i < filters.length; i++) {
+        var filter = filters[i];
+        if (filter.testMessage(header, body, matchObj))
+          matched = true;
+      }
+    }
+    catch (ex) {
+      console.error('filter exception', ex, '\n', ex.stack);
     }
     //console.log('   =>', matched, JSON.stringify(matchObj));
     if (matched)
@@ -27718,7 +28115,7 @@ exports.chewBodyParts = function chewBodyParts(rep, bodyPartContents,
     date: rep.msg.date,
     flags: rep.msg.flags,
     hasAttachments: rep.attachments.length > 0,
-    subject: rep.msg.msg.subject,
+    subject: rep.msg.msg.subject || null,
     snippet: snippet,
   };
 
@@ -28568,6 +28965,13 @@ ImapFolderSyncer.prototype = {
    */
   syncable: true,
 
+  /**
+   * Can we grow this sync range?  IMAP always lets us do this.
+   */
+  get canGrowSync() {
+    return true;
+  },
+
   syncDateRange: function(startTS, endTS, syncCallback, doneCallback,
                           progressCallback) {
     syncCallback('sync', false);
@@ -28660,7 +29064,11 @@ ImapFolderSyncer.prototype = {
 
       // Perform a limited synchronization; do not issue additional syncs!
       syncCallback('limsync', iFirstNotToSend);
-      this._startSync(syncStartTS, syncEndTS, doneCallback, progressCallback);
+      // Because we are refreshing a known time interval and growth is not
+      // particularly likely, we really do not want bisection to happen, so
+      // pass a super-high limit for the bisection cap.
+      this._startSync(syncStartTS, syncEndTS, doneCallback, progressCallback,
+                      $sync.TOO_MANY_MESSAGES);
       return true;
     }
     // If growth was requested/is allowed or our accuracy range already covers
@@ -28675,7 +29083,7 @@ ImapFolderSyncer.prototype = {
   },
 
   _startSync: function ifs__startSync(startTS, endTS, doneCallback,
-                                      progressCallback) {
+                                      progressCallback, useBisectLimit) {
     if (startTS === null)
       startTS = endTS - ($sync.INITIAL_SYNC_DAYS * DAY_MILLIS);
     this._curSyncAccuracyStamp = NOW();
@@ -28685,7 +29093,8 @@ ImapFolderSyncer.prototype = {
     this._curSyncDoneCallback = doneCallback;
 
     this.folderConn.syncDateRange(startTS, endTS, this._curSyncAccuracyStamp,
-                                  null, this.onSyncCompleted.bind(this),
+                                  useBisectLimit,
+                                  this.onSyncCompleted.bind(this),
                                   progressCallback);
   },
 
@@ -29001,69 +29410,90 @@ exports.local_do_move = function(op, doneCallback, targetFolderId) {
   op.guids = {};
   const nukeServerIds = !this.resilientServerIds;
 
-  var stateDelta = this._stateDelta, addWait = 0;
+  var stateDelta = this._stateDelta, addWait = 0, self = this;
   if (!stateDelta.moveMap)
     stateDelta.moveMap = {};
   if (!stateDelta.serverIdMap)
     stateDelta.serverIdMap = {};
-  var perSourceFolder = function perSourceFolder(ignoredConn, targetStorage) {
-    this._partitionAndAccessFoldersSequentially(
-      op.messages, false,
-      function perFolder(ignoredConn, sourceStorage, headers, namers,
-                         perFolderDone) {
-        // -- get the body for the next header (or be done)
-        function processNext() {
-          if (iNextHeader >= headers.length) {
-            perFolderDone();
-            return;
+  if (!targetFolderId)
+    targetFolderId = op.targetFolder;
+
+  this._partitionAndAccessFoldersSequentially(
+    op.messages, false,
+    function perFolder(ignoredConn, sourceStorage, headers, namers,
+                       perFolderDone) {
+      // -- get the body for the next header (or be done)
+      function processNext() {
+        if (iNextHeader >= headers.length) {
+          perFolderDone();
+          return;
+        }
+        header = headers[iNextHeader++];
+        sourceStorage.getMessageBody(header.suid, header.date,
+                                     gotBody_nowDelete);
+      }
+      // -- delete the header and body from the source
+      function gotBody_nowDelete(_body) {
+        body = _body;
+
+        // We need an entry in the server id map if we are moving/deleting it.
+        // We don't need this if we're moving a message to the folder it's
+        // already in, but it doesn't hurt anything.
+        if (header.srvid)
+          stateDelta.serverIdMap[header.suid] = header.srvid;
+
+        if (sourceStorage.folderId === targetFolderId) {
+          if (op.type === 'move') {
+            // A move from a folder to itself is a no-op.
+            processNext();
           }
-          header = headers[iNextHeader++];
-          sourceStorage.getMessageBody(header.suid, header.date,
-                                       gotBody_nowDelete);
+          else { // op.type === 'delete'
+            // If the op is a delete and the source and destination folders
+            // match, we're deleting from trash, so just perma-delete it.
+            sourceStorage.deleteMessageHeaderAndBody(header, processNext);
+          }
         }
-        // -- delete the header and body from the source
-        function gotBody_nowDelete(_body) {
-          body = _body;
-          sourceStorage.deleteMessageHeaderAndBody(header, deleted_nowAdd);
+        else {
+          sourceStorage.deleteMessageHeaderAndBody(
+            header, deleted_nowOpenTarget);
         }
-        // -- add the header/body to the target folder
-        function deleted_nowAdd() {
-          var sourceSuid = header.suid;
+      }
+      // -- open the target folder
+      function deleted_nowOpenTarget() {
+        self._accessFolderForMutation(targetFolderId, false,
+                                      targetOpened_nowAdd, null,
+                                      'local move target');
+      }
+      // -- add the header/body to the target folder
+      function targetOpened_nowAdd(ignoredConn, targetStorage) {
+        var sourceSuid = header.suid;
 
-          // We need an entry in the server id map if we are moving it.
-          if (header.srvid)
-            stateDelta.serverIdMap[sourceSuid] = header.srvid;
+        // - update id fields
+        header.id = targetStorage._issueNewHeaderId();
+        header.suid = targetStorage.folderId + '/' + header.id;
+        if (nukeServerIds)
+          header.srvid = null;
 
-          // - update id fields
-          header.id = targetStorage._issueNewHeaderId();
-          header.suid = targetStorage.folderId + '/' + header.id;
-          if (nukeServerIds)
-            header.srvid = null;
+        stateDelta.moveMap[sourceSuid] = header.suid;
 
-          stateDelta.moveMap[sourceSuid] = header.suid;
-
-          addWait = 2;
-          targetStorage.addMessageHeader(header, added);
-          targetStorage.addMessageBody(header, body, added);
-        }
-        function added() {
-          if (--addWait !== 0)
-            return;
-          processNext();
-        }
-        var iNextHeader = 0, header = null, body = null, addWait = 0;
+        addWait = 2;
+        targetStorage.addMessageHeader(header, added);
+        targetStorage.addMessageBody(header, body, added);
+      }
+      function added() {
+        if (--addWait !== 0)
+          return;
         processNext();
-      },
-      function() {
-        doneCallback(null, null, true);
-      },
-      null,
-      false,
-      'local move source');
-  }.bind(this);
-  this._accessFolderForMutation(
-    targetFolderId || op.targetFolder, false,
-    perSourceFolder, null, 'local move target');
+      }
+      var iNextHeader = 0, header = null, body = null, addWait = 0;
+      processNext();
+    },
+    function() {
+      doneCallback(null, null, true);
+    },
+    null,
+    false,
+    'local move source');
 };
 
 // XXX implement!
@@ -29187,7 +29617,7 @@ exports.do_download = function(op, callback) {
           storeTo = storePartsTo[i];
 
       if (blob) {
-        partInfo.sizeEstimate = blob.length;
+        partInfo.sizeEstimate = blob.size;
         partInfo.type = blob.type;
         if (storeTo === 'idb')
           partInfo.file = blob;
@@ -29382,14 +29812,20 @@ exports._partitionAndAccessFoldersSequentially = function(
     var iNextServerId = serverIds.indexOf(null);
     for (var i = 0; i < headers.length; i++) {
       var header = headers[i];
-      if (!header)
-        console.warn('missing header!',
-                     JSON.stringify(folderMessageNamers[iNextServerId]));
-      var srvid = header.srvid;
-      serverIds[iNextServerId] = srvid;
+      // It's possible that by the time this job actually gets a chance to run
+      // that the header is no longer in the folder.  This is rare but not
+      // particularly exceptional.
+      if (header) {
+        var srvid = header.srvid;
+        serverIds[iNextServerId] = srvid;
+        // A header that exists but does not have a server id is exceptional and
+        // bad, although logic should handle it because of the above dead-header
+        // case.  suidToServerId should really have provided this information to
+        // us.
+        if (!srvid)
+          console.warn('Header', headers[i].suid, 'missing server id in job!');
+      }
       iNextServerId = serverIds.indexOf(null, iNextServerId + 1);
-      if (!srvid)
-        console.warn('Header', headers[i].suid, 'missing server id in job!');
     }
     try {
       callInFolder(folderConn, storage, serverIds, folderMessageNamers,
@@ -29727,10 +30163,15 @@ ImapJobDriver.prototype = {
         var uids = [];
         for (var i = 0; i < serverIds.length; i++) {
           var srvid = serverIds[i];
-          // If the header is somehow an offline header, it will be zero and
-          // there is nothing we can really do for it.
+          // The header may have disappeared from the server, in which case the
+          // header is moot.
           if (srvid)
             uids.push(srvid);
+        }
+        // Be done if all of the headers were moot.
+        if (!uids.length) {
+          callWhenDone();
+          return;
         }
         if (addTags) {
           modsToGo++;
@@ -29934,20 +30375,22 @@ ImapJobDriver.prototype = {
     var state = this._state, stateDelta = this._stateDelta, aggrErr = null;
     if (!stateDelta.serverIdMap)
       stateDelta.serverIdMap = {};
-    // resolve the target folder again
-    this._accessFolderForMutation(
-      targetFolderId || op.targetFolder, true,
-      function gotTargetConn(targetConn, targetStorage) {
-        var uidnext = targetConn.box._uidnext;
+    if (!targetFolderId)
+      targetFolderId = op.targetFolder;
 
-      this._partitionAndAccessFoldersSequentially(
-        op.messages, true,
-        function perFolder(folderConn, sourceStorage, serverIds, namers,
-                           perFolderDone){
-          // - copies are done, find the UIDs
-          // XXX process UIDPLUS output when present, avoiding this step.
-          var guidToNamer = {}, waitingOnHeaders = namers.length,
-              reportedHeaders = 0, retriesLeft = 3;
+    this._partitionAndAccessFoldersSequentially(
+      op.messages, true,
+      function perFolder(folderConn, sourceStorage, serverIds, namers,
+                         perFolderDone){
+        // XXX process UIDPLUS output when present, avoiding this step.
+        var guidToNamer = {}, waitingOnHeaders = namers.length,
+            reportedHeaders = 0, retriesLeft = 3, targetConn;
+
+        // - got the target folder conn, now do the copies
+        function gotTargetConn(targetConn, targetStorage) {
+          var uidnext = targetConn.box._uidnext;
+          folderConn._conn.copy(serverIds, targetStorage.folderMeta.path,
+                                copiedMessages_reselect);
 
           function copiedMessages_reselect() {
             // Force a re-select of the folder to try and force the server to
@@ -29961,6 +30404,7 @@ ImapJobDriver.prototype = {
             // selection and lose.
             targetConn.reselectBox(copiedMessages_findNewUIDs);
           }
+          // - copies are done, find the UIDs
           function copiedMessages_findNewUIDs() {
             var fetcher = targetConn._conn.fetch(
               uidnext + ':*',
@@ -30024,40 +30468,61 @@ ImapJobDriver.prototype = {
                 return true;
               });
           }
-          function foundUIDs_deleteOriginals() {
-            folderConn._conn.addFlags(serverIds, ['\\Deleted'],
-                                      deletedMessages);
-          }
-          function deletedMessages(err) {
-            if (err)
-              aggrErr = true;
-            perFolderDone();
-          }
+        }
 
-          for (var i = 0; i < namers.length; i++) {
-            var namer = namers[i];
-            guidToNamer[namer.guid] = namer;
-          }
+        function foundUIDs_deleteOriginals() {
+          folderConn._conn.addFlags(serverIds, ['\\Deleted'],
+                                    deletedMessages);
+        }
+        function deletedMessages(err) {
+          if (err)
+            aggrErr = true;
+          perFolderDone();
+        }
 
-          folderConn._conn.copy(
-            serverIds,
-            targetStorage.folderMeta.path,
-            copiedMessages_reselect);
-        },
-        function() {
-          jobDoneCallback(aggrErr);
-        },
-        null,
-        false,
-        'local move source');
-      // get a connection in the source folder, uid validity is asserted
-      // issue the (potentially bulk) copy
-      // wait for copy success
-      // mark the source messages deleted
-    }.bind(this),
-    function targetFolderDead() {
-    },
-    'move target');
+        // Build a guid-to-namer map and deal with any messages that no longer
+        // exist on the server.  Do it backwards so we can splice.
+        for (var i = namers.length - 1; i >= 0; i--) {
+          var srvid = serverIds[i];
+          if (!srvid) {
+            serverIds.splice(i, 1);
+            namers.splice(i, 1);
+            continue;
+          }
+          var namer = namers[i];
+          guidToNamer[namer.guid] = namer;
+        }
+        // it's possible all the messages could be gone, in which case we
+        // are done with this folder already!
+        if (serverIds.length === 0) {
+          perFolderDone();
+          return;
+        }
+
+        if (sourceStorage.folderId === targetFolderId) {
+          if (op.type === 'move') {
+            // A move from a folder to itself is a no-op.
+            processNext();
+          }
+          else { // op.type === 'delete'
+            // If the op is a delete and the source and destination folders
+            // match, we're deleting from trash, so just perma-delete it.
+            foundUIDs_deleteOriginals();
+          }
+        }
+        else {
+          // Resolve the target folder again.
+          this._accessFolderForMutation(targetFolderId, true, gotTargetConn,
+                                        function targetFolderDead() {},
+                                        'move target');
+        }
+      }.bind(this),
+      function() {
+        jobDoneCallback(aggrErr);
+      },
+      null,
+      false,
+      'local move source');
   },
 
   /**
@@ -30434,6 +30899,7 @@ define('mailapi/imap/account',
     '../mailslice',
     '../searchfilter',
     '../util',
+    './probe',
     './folder',
     './jobs',
     'module',
@@ -30449,6 +30915,7 @@ define('mailapi/imap/account',
     $mailslice,
     $searchfilter,
     $util,
+    $imapprobe,
     $imapfolder,
     $imapjobs,
     $module,
@@ -31000,61 +31467,22 @@ ImapAccount.prototype = {
       connectCallbackTriggered = true;
       this._pendingConn = null;
       if (err) {
-        var errName, reachable = false, maybeRetry = true;
-        // We want to produce error-codes as defined in `MailApi.js` for
-        // tryToCreateAccount.  We have also tried to make imap.js produce
-        // error codes of the right type already, but for various generic paths
-        // (like saying 'NO'), there isn't currently a good spot for that.
-        switch (err.type) {
-          // dovecot says after a delay and does not terminate the connection:
-          //   NO [AUTHENTICATIONFAILED] Authentication failed.
-          // zimbra 7.2.x says after a delay and DOES terminate the connection:
-          //   NO LOGIN failed
-          //   * BYE Zimbra IMAP server terminating connection
-          // yahoo says after a delay and does not terminate the connection:
-          //   NO [AUTHENTICATIONFAILED] Incorrect username or password.
-          case 'NO':
-          case 'no':
-            // XXX: Should we check if it's GMail first?
-            if (!err.serverResponse)
-              errName = 'unknown';
-            else if (err.serverResponse.indexOf(
-                '[ALERT] Application-specific password required') !== -1)
-              errName = 'needs-app-pass';
-            else if (err.serverResponse.indexOf(
-                 '[ALERT] Your account is not enabled for IMAP use.') !== -1)
-              errName = 'imap-disabled';
-            else
-              errName = 'bad-user-or-pass';
-            reachable = true;
-            // go directly to the broken state; no retries
-            maybeRetry = false;
-            // tell the higher level to disable our account until we fix our
-            // credentials problem and ideally generate a UI prompt.
-            this.universe.__reportAccountProblem(this.compositeAccount,
-                                                 errName);
-            break;
-          // errors we can pass through directly:
-          case 'server-maintenance':
-            errName = err.type;
-            reachable = true;
-            break;
-          case 'timeout':
-            errName = 'unresponsive-server';
-            break;
-          default:
-            errName = 'unknown';
-            break;
-        }
-        console.error('Connect error:', errName, 'formal:', err, 'on',
+        var normErr = $imapprobe.normalizeError(err);
+        console.error('Connect error:', normErr.name, 'formal:', err, 'on',
                       this._connInfo.hostname, this._connInfo.port);
+        if (normErr.reportProblem)
+          this.universe.__reportAccountProblem(this.compositeAccount,
+                                               normErr.name);
+
+
         if (listener)
-          listener(errName);
+          listener(normErr.name);
         conn.die();
 
         // track this failure for backoff purposes
-        if (maybeRetry) {
-          if (this._backoffEndpoint.noteConnectFailureMaybeRetry(reachable))
+        if (normErr.retry) {
+          if (this._backoffEndpoint.noteConnectFailureMaybeRetry(
+                                      normErr.reachable))
             this._makeConnectionIfPossible();
           else
             this._killDieOnConnectFailureDemands();
@@ -32348,7 +32776,6 @@ function FakeAccount(universe, accountDef, folderInfo, receiveProtoConn, _LOG) {
 
   this.meta = folderInfo.$meta;
   this.mutations = folderInfo.$mutations;
-  this.deferredMutations = folderInfo.$deferredMutations;
 }
 exports.FakeAccount = FakeAccount;
 FakeAccount.prototype = {
@@ -32531,7 +32958,6 @@ function ActiveSyncFolderConn(account, storage, _parentLog) {
   this._LOG = LOGFAB.ActiveSyncFolderConn(this, _parentLog, storage.folderId);
 
   this.folderMeta = storage.folderMeta;
-  this.serverId = this.folderMeta.serverId;
 
   if (!this.syncKey)
     this.syncKey = '0';
@@ -32543,6 +32969,10 @@ ActiveSyncFolderConn.prototype = {
 
   set syncKey(value) {
     return this.folderMeta.syncKey = value;
+  },
+
+  get serverId() {
+    return this.folderMeta.serverId;
   },
 
   /**
@@ -32670,7 +33100,7 @@ ActiveSyncFolderConn.prototype = {
       });
       e.addEventListener(base.concat(ie.Collection, ie.Estimate),
                          function(node) {
-        estimate = parseInt(node.children[0].textContent);
+        estimate = parseInt(node.children[0].textContent, 10);
       });
 
       try {
@@ -32935,7 +33365,7 @@ ActiveSyncFolderConn.prototype = {
         collection.push(msg);
       });
 
-      e.addEventListener(base.concat(as.Commands, [as.Delete, as.SoftDelete]),
+      e.addEventListener(base.concat(as.Commands, [[as.Delete, as.SoftDelete]]),
                          function(node) {
         let guid;
 
@@ -33167,7 +33597,7 @@ ActiveSyncFolderConn.prototype = {
               break;
             case asb.EstimatedDataSize:
             case em.AttSize:
-              attachment.sizeEstimate = parseInt(attachDataText);
+              attachment.sizeEstimate = parseInt(attachDataText, 10);
               break;
             case asb.ContentId:
               attachment.contentId = attachDataText;
@@ -33211,16 +33641,22 @@ ActiveSyncFolderConn.prototype = {
 
   syncDateRange: function asfc_syncDateRange(startTS, endTS, accuracyStamp,
                                              doneCallback, progressCallback) {
-    let storage = this._storage;
-    let folderConn = this;
-    let messagesSeen = 0;
+    let folderConn = this,
+        addedMessages = 0,
+        changedMessages = 0,
+        deletedMessages = 0;
 
     this._LOG.syncDateRange_begin(null, null, null, startTS, endTS);
     this._enumerateFolderChanges(function (error, added, changed, deleted,
                                            moreAvailable) {
+      let storage = folderConn._storage;
+
       if (error === 'badkey') {
         folderConn._account._recreateFolder(storage.folderId, function(s) {
-          folderConn.storage = s;
+          // If we got a bad sync key, we'll end up creating a new connection,
+          // so just clear out the old storage to make this connection unusable.
+          folderConn._storage = null;
+          folderConn._LOG.syncDateRange_end(null, null, null, startTS, endTS);
         });
         return;
       }
@@ -33230,28 +33666,49 @@ ActiveSyncFolderConn.prototype = {
       }
 
       for (let [,message] in Iterator(added)) {
+        // If we already have this message, it's probably because we moved it as
+        // part of a local op, so let's assume that the data we already have is
+        // ok. XXX: We might want to verify this, to be safe.
+        if (storage.hasMessageWithServerId(message.header.srvid))
+          continue;
+
         storage.addMessageHeader(message.header);
         storage.addMessageBody(message.header, message.body);
+        addedMessages++;
       }
 
       for (let [,message] in Iterator(changed)) {
+        // If we don't know about this message, just bail out.
+        if (!storage.hasMessageWithServerId(message.header.srvid))
+          continue;
+
         storage.updateMessageHeaderByServerId(message.header.srvid, true,
                                               function(oldHeader) {
           message.header.mergeInto(oldHeader);
           return true;
         });
+        changedMessages++;
         // XXX: update bodies
       }
 
       for (let [,messageGuid] in Iterator(deleted)) {
+        // If we don't know about this message, it's probably because we already
+        // deleted it.
+        if (!storage.hasMessageWithServerId(messageGuid))
+          continue;
+
         storage.deleteMessageByServerId(messageGuid);
+        deletedMessages++;
       }
 
-      messagesSeen += added.length + changed.length + deleted.length;
-
       if (!moreAvailable) {
-        folderConn._LOG.syncDateRange_end(added.length, changed.length,
-                                          deleted.length, startTS, endTS);
+        let messagesSeen = addedMessages + changedMessages + deletedMessages;
+
+        // Note: For the second argument here, we report the number of messages
+        // we saw that *changed*. This differs from IMAP, which reports the
+        // number of messages it *saw*.
+        folderConn._LOG.syncDateRange_end(addedMessages, changedMessages,
+                                          deletedMessages, startTS, endTS);
         storage.markSyncRange(startTS, endTS, 'XXX', accuracyStamp);
         doneCallback(null, null, messagesSeen);
       }
@@ -33284,7 +33741,9 @@ ActiveSyncFolderConn.prototype = {
 
           w.tag(as.SyncKey, this.syncKey)
            .tag(as.CollectionId, this.serverId)
-           // DeletesAsMoves defaults to true, so we can omit it
+           // Use DeletesAsMoves in non-trash folders. Don't use it in trash
+           // folders because that doesn't make any sense.
+           .tag(as.DeletesAsMoves, this.folderMeta.type === 'trash' ? '0' : '1')
            // GetChanges defaults to true, so we must explicitly disable it to
            // avoid hearing about changes.
            .tag(as.GetChanges, '0')
@@ -33323,13 +33782,11 @@ ActiveSyncFolderConn.prototype = {
         status = node.children[0].textContent;
       });
 
-      //console.warn('COMMAND RESULT:\n', aResponse.dump());
-      //aResponse.rewind();
       try {
         e.run(aResponse);
       }
       catch (ex) {
-        console.error('Error parsing Sync reponse:', ex, '\n', ex.stack);
+        console.error('Error parsing Sync response:', ex, '\n', ex.stack);
         callWhenDone('unknown');
         return;
       }
@@ -33463,6 +33920,13 @@ ActiveSyncFolderSyncer.prototype = {
    */
   get syncable() {
     return this.folderConn.serverId !== null;
+  },
+
+  /**
+   * Can we grow this sync range?  Not in ActiveSync land!
+   */
+  get canGrowSync() {
+    return false;
   },
 
   syncDateRange: function(startTS, endTS, syncCallback, doneCallback,
@@ -33685,17 +34149,21 @@ ActiveSyncJobDriver.prototype = {
           if (--modsToGo === 0)
             callWhenDone();
         }
+
+        // Filter out any offline headers, since the server naturally can't do
+        // anything for them. If this means we have no headers at all, just bail
+        // out.
+        serverIds = serverIds.filter(function(srvid) { return !!srvid; });
+        if (!serverIds.length) {
+          callWhenDone();
+          return;
+        }
+
         folderConn.performMutation(
           function withWriter(w) {
             for (let i = 0; i < serverIds.length; i++) {
-              let srvid = serverIds[i];
-              // If the header is somehow an offline header, it will be null and
-              // there is nothing we can really do for it.
-              if (!srvid)
-                continue;
-
               w.stag(as.Change)
-                 .tag(as.ServerId, srvid)
+                 .tag(as.ServerId, serverIds[i])
                  .stag(as.ApplicationData);
 
               if (markRead !== undefined)
@@ -33758,27 +34226,37 @@ ActiveSyncJobDriver.prototype = {
     let aggrErr = null, account = this.account,
         targetFolderStorage = this.account.getFolderStorageForFolderId(
                                 op.targetFolder);
-    const as = $ascp.AirSync.Tags;
-    const em = $ascp.Email.Tags;
     const mo = $ascp.Move.Tags;
 
     this._partitionAndAccessFoldersSequentially(
       op.messages, true,
       function perFolder(folderConn, storage, serverIds, namers, callWhenDone) {
+        // Filter out any offline headers, since the server naturally can't do
+        // anything for them. If this means we have no headers at all, just bail
+        // out.
+        serverIds = serverIds.filter(function(srvid) { return !!srvid; });
+        if (!serverIds.length) {
+          callWhenDone();
+          return;
+        }
+
+        // Filter out any offline headers, since the server naturally can't do
+        // anything for them. If this means we have no headers at all, just bail
+        // out.
+        serverIds = serverIds.filter(function(srvid) { return !!srvid; });
+        if (!serverIds.length) {
+          callWhenDone();
+          return;
+        }
+
         let w = new $wbxml.Writer('1.3', 1, 'UTF-8');
         w.stag(mo.MoveItems);
-
         for (let i = 0; i < serverIds.length; i++) {
-          let srvid = serverIds[i];
-          // If the header is somehow an offline header, it will be null and
-          // there is nothing we can really do for it.
-          if (!srvid)
-            continue;
           w.stag(mo.Move)
-              .tag(mo.SrcMsgId, srvid)
-              .tag(mo.SrcFldId, storage.folderMeta.serverId)
-              .tag(mo.DstFldId, targetFolderStorage.folderMeta.serverId)
-            .etag(mo.Move);
+             .tag(mo.SrcMsgId, serverIds[i])
+             .tag(mo.SrcFldId, storage.folderMeta.serverId)
+             .tag(mo.DstFldId, targetFolderStorage.folderMeta.serverId)
+           .etag(mo.Move);
         }
         w.etag(mo.MoveItems);
 
@@ -33822,20 +34300,21 @@ ActiveSyncJobDriver.prototype = {
     this._partitionAndAccessFoldersSequentially(
       op.messages, true,
       function perFolder(folderConn, storage, serverIds, namers, callWhenDone) {
+        // Filter out any offline headers, since the server naturally can't do
+        // anything for them. If this means we have no headers at all, just bail
+        // out.
+        serverIds = serverIds.filter(function(srvid) { return !!srvid; });
+        if (!serverIds.length) {
+          callWhenDone();
+          return;
+        }
+
         folderConn.performMutation(
           function withWriter(w) {
             for (let i = 0; i < serverIds.length; i++) {
-              let srvid = serverIds[i];
-              // If the header is somehow an offline header, it will be null and
-              // there is nothing we can really do for it.
-              if (!srvid) {
-                console.log('AS message', namers[i].suid, 'lacks srvid!');
-                continue;
-              }
-
               w.stag(as.Delete)
-                  .tag(as.ServerId, srvid)
-                .etag(as.Delete);
+                 .tag(as.ServerId, serverIds[i])
+               .etag(as.Delete);
             }
           },
           function mutationPerformed(err) {
@@ -33895,11 +34374,9 @@ ActiveSyncJobDriver.prototype = {
     // have active slices displaying the contents of the folder.  (No server id
     // means the sync will not happen.)
     var inboxFolder = account.getFirstFolderWithType('inbox'),
-        inboxStorage, inboxNeedsResync = false;
-    if (inboxFolder && inboxFolder.serverId === null) {
+        inboxStorage;
+    if (inboxFolder && inboxFolder.serverId === null)
       inboxStorage = account.getFolderStorageForFolderId(inboxFolder.id);
-      inboxNeedsResync = inboxStorage.hasActiveSlices;
-    }
 
     account.syncFolderList(function(err) {
       if (!err)
@@ -33907,8 +34384,17 @@ ActiveSyncJobDriver.prototype = {
       // save if it worked
       doneCallback(err ? 'aborted-retry' : null, null, !err);
 
-      if (inboxNeedsResync)
-        inboxStorage.resetAndRefreshActiveSlices();
+      if (inboxStorage && inboxStorage.hasActiveSlices) {
+        if (!err) {
+          console.log("Refreshing fake inbox");
+          inboxStorage.resetAndRefreshActiveSlices();
+        }
+        // XXX: If we do have an error here, we should probably report
+        // syncfailed on the slices to let the user retry. However, what needs
+        // retrying is syncFolderList, not syncing the messages in a folder.
+        // Since that's complicated to handle, and syncFolderList will retry
+        // automatically, we can ignore that case for now.
+      }
     });
   },
 
@@ -34309,10 +34795,6 @@ ActiveSyncAccount.prototype = {
         existingInboxMeta.name = displayName;
         existingInboxMeta.path = path;
         existingInboxMeta.depth = depth;
-        // Its folder connection needs to know the updated server id since it
-        // copied it out.
-        let folderStorage = this._folderStorages[existingInboxMeta.id];
-        folderStorage.folderSyncer.folderConn.serverId = serverId;
         return existingInboxMeta;
       }
     }
@@ -34329,6 +34811,7 @@ ActiveSyncAccount.prototype = {
         lastSyncedAt: 0,
         syncKey: '0',
       },
+      // any changes to the structure here must be reflected in _recreateFolder!
       $impl: {
         nextId: 0,
         nextHeaderBlock: 0,
@@ -34394,9 +34877,15 @@ ActiveSyncAccount.prototype = {
   _recreateFolder: function asa__recreateFolder(folderId, callback) {
     this._LOG.recreateFolder(folderId);
     let folderInfo = this._folderInfos[folderId];
+    folderInfo.$impl = {
+      nextId: 0,
+      nextHeaderBlock: 0,
+      nextBodyBlock: 0,
+    };
     folderInfo.accuracy = [];
     folderInfo.headerBlocks = [];
     folderInfo.bodyBlocks = [];
+    folderInfo.serverIdHeaderBlockMapping = {};
 
     if (this._deadFolderIds === null)
       this._deadFolderIds = [];
@@ -34916,7 +35405,7 @@ CompositeAccount.prototype = {
                                            [message]);
           }.bind(this));
         }
-        callback(err, errDetails);
+        callback(err, errDetails, null);
       }.bind(this));
   },
 
@@ -35056,23 +35545,23 @@ Configurators['imap+smtp'] = {
       ['imap', 'smtp'],
       function probesDone(results) {
         // -- both good?
-        if (!results.imap[0] && results.smtp) {
+        if (results.imap[0] === null && results.smtp[0] === null) {
           var account = self._defineImapAccount(
             universe,
             userDetails, credentials,
             imapConnInfo, smtpConnInfo, results.imap[1],
             results.imap[2]);
-          callback(null, account);
+          callback(null, account, null);
         }
         // -- either/both bad
         else {
           // clean up the imap connection if it was okay but smtp failed
-          if (!results.imap[0]) {
+          if (results.imap[0] === null) {
             results.imap[1].die();
             // Failure was caused by SMTP, but who knows why
-            callback('smtp-unknown', null);
+            callback(results.smtp[0], null, results.smtp[1]);
           } else {
-            callback(results.imap[0], null); // Pass imap error type back
+            callback(results.imap[0], null, results.imap[2]);
           }
           return;
         }
@@ -35128,7 +35617,7 @@ Configurators['imap+smtp'] = {
 
     var account = this._loadAccount(universe, accountDef,
                                     oldAccountInfo.folderInfo);
-    callback(null, account);
+    callback(null, account, null);
   },
 
   /**
@@ -35232,7 +35721,7 @@ Configurators['fake'] = {
     };
 
     var account = this._loadAccount(universe, accountDef);
-    callback(null, account);
+    callback(null, account, null);
   },
 
   recreateAccount: function cfg_fake_ra(universe, oldVersion, oldAccountInfo,
@@ -35262,7 +35751,7 @@ Configurators['fake'] = {
     };
 
     var account = this._loadAccount(universe, accountDef);
-    callback(null, account);
+    callback(null, account, null);
   },
 
   /**
@@ -35297,18 +35786,34 @@ Configurators['activesync'] = {
     conn.timeout = $asacct.DEFAULT_TIMEOUT_MS;
 
     conn.connect(function(error, options) {
-      // XXX: Think about what to do with this error handling, since it's
-      // replicated in the autoconfig code.
       if (error) {
-        var failureType = 'unknown';
+        // This error is basically an indication of whether we were able to
+        // call getOptions or not.  If the XHR request completed, we get an
+        // HttpError.  If we timed out or an XHR error occurred, we get a
+        // general Error.
+        var failureType,
+            failureDetails = { server: domainInfo.incoming.server };
 
         if (error instanceof $asproto.HttpError) {
-          if (error.status === 401)
+          if (error.status === 401) {
             failureType = 'bad-user-or-pass';
-          else if (error.status === 403)
+          }
+          else if (error.status === 403) {
             failureType = 'not-authorized';
+          }
+          // Treat any other errors where we talked to the server as a problem
+          // with the server.
+          else {
+            failureType = 'server-problem';
+            failureDetails.status = error.status;
+          }
         }
-        callback(failureType, null);
+        else {
+          // We didn't talk to the server, so let's call it an unresponsive
+          // server.
+          failureType = 'unresponsive-server';
+        }
+        callback(failureType, null, failureDetails);
         return;
       }
 
@@ -35338,7 +35843,7 @@ Configurators['activesync'] = {
       };
 
       var account = self._loadAccount(universe, accountDef, conn);
-      callback(null, account);
+      callback(null, account, null);
     });
   },
 
@@ -35367,7 +35872,7 @@ Configurators['activesync'] = {
     };
 
     var account = this._loadAccount(universe, accountDef, null);
-    callback(null, account);
+    callback(null, account, null);
   },
 
   /**
@@ -35454,6 +35959,20 @@ function Autoconfigurator(_LOG) {
 }
 exports.Autoconfigurator = Autoconfigurator;
 Autoconfigurator.prototype = {
+  /**
+   * The list of fatal error codes.
+   *
+   * What's fatal and why:
+   * - bad-user-or-pass: We found a server, it told us the credentials were
+   *     bogus.  There is no point going on.
+   * - not-authorized: We found a server, it told us the credentials are fine
+   *     but the access rights are insufficient.  There is no point going on.
+   *
+   * Non-fatal and why:
+   * - unknown: If something failed we should keep checking other info sources.
+   * - no-config-info: The specific source had no details; we should keep
+   *     checking other sources.
+   */
   _fatalErrors: ['bad-user-or-pass', 'not-authorized'],
 
   /**
@@ -35485,7 +36004,9 @@ Autoconfigurator.prototype = {
 
     xhr.onload = function() {
       if (xhr.status < 200 || xhr.status >= 300) {
-        callback('unknown');
+        // Non-fatal failure to get the config info.  While a 404 is the
+        // expected case, this is the appropriate error for weirder cases too.
+        callback('no-config-info', null, { status: xhr.status });
         return;
       }
       // XXX: For reasons which are currently unclear (possibly a platform
@@ -35517,21 +36038,45 @@ Autoconfigurator.prototype = {
           config.type = 'imap+smtp';
           for (let [,child] in Iterator(outgoing.children))
             config.outgoing[child.tagName] = child.textContent;
+
+          // We do not support unencrypted connections outside of unit tests.
+          if (config.incoming.socketType !== 'SSL' ||
+              config.outgoing.socketType !== 'SSL') {
+            callback('no-config-info', null, { status: 'unsafe' });
+            return;
+          }
         }
         else {
-          callback('unknown');
+          callback('no-config-info', null, { status: 'no-outgoing' });
+          return;
         }
 
-        callback(null, config);
+        callback(null, config, null);
       }
       else {
-        callback('unknown');
+        callback('no-config-info', null, { status: 'no-incoming' });
       }
     };
 
-    xhr.ontimeout = xhr.onerror = function() { callback('unknown'); };
+    xhr.ontimeout = xhr.onerror = function() {
+      // The effective result is a failure to get configuration info, but make
+      // sure the status conveys that a timeout occurred.
+      callback('no-config-info', null, { status: 'timeout' });
+    };
+    xhr.onerror = function() {
+      // The effective result is a failure to get configuration info, but make
+      // sure the status conveys that a timeout occurred.
+      callback('no-config-info', null, { status: 'error' });
+    };
 
-    xhr.send();
+    // Gecko currently throws in send() if the file we're opening doesn't exist.
+    // This is almost certainly wrong, but let's just work around it for now.
+    try {
+      xhr.send();
+    }
+    catch(e) {
+      callback('no-config-info', null, { status: 404 });
+    }
   },
 
   /**
@@ -35558,15 +36103,18 @@ Autoconfigurator.prototype = {
     $asproto.autodiscover(userDetails.emailAddress, userDetails.password,
                           this.timeout, function(error, config) {
       if (error) {
-        var failureType = 'unknown';
+        var failureType = 'no-config-info',
+            failureDetails = {};
 
         if (error instanceof $asproto.HttpError) {
           if (error.status === 401)
             failureType = 'bad-user-or-pass';
           else if (error.status === 403)
             failureType = 'not-authorized';
+          else
+            failureDetails.status = error.status;
         }
-        callback(failureType);
+        callback(failureType, null, failureDetails);
         return;
       }
 
@@ -35578,7 +36126,7 @@ Autoconfigurator.prototype = {
           username: config.user.email
         },
       };
-      callback(null, autoconfig);
+      callback(null, autoconfig, null);
     });
   },
 
@@ -35599,15 +36147,19 @@ Autoconfigurator.prototype = {
     let url = 'http://autoconfig.' + domain + suffix;
     let self = this;
 
-    this._getXmlConfig(url, function(error, config) {
-      if (self._isSuccessOrFatal(error))
-        return callback(error, config);
+    this._getXmlConfig(url, function(error, config, errorDetails) {
+      if (self._isSuccessOrFatal(error)) {
+        callback(error, config, errorDetails);
+        return;
+      }
 
       // See <http://tools.ietf.org/html/draft-nottingham-site-meta-04>.
       let url = 'http://' + domain + '/.well-known/autoconfig' + suffix;
-      self._getXmlConfig(url, function(error, config) {
-        if (self._isSuccessOrFatal(error))
-          return callback(error, config);
+      self._getXmlConfig(url, function(error, config, errorDetails) {
+        if (self._isSuccessOrFatal(error)) {
+          callback(error, config, errorDetails);
+          return;
+        }
 
         console.log('  Trying domain autodiscover');
         self._getConfigFromAutodiscover(userDetails, callback);
@@ -35643,12 +36195,17 @@ Autoconfigurator.prototype = {
 
     xhr.onload = function() {
       if (xhr.status === 200)
-        callback(null, xhr.responseText.split('\n')[0]);
+        callback(null, xhr.responseText.split('\n')[0], null);
       else
-        callback('unknown');
+        callback('no-config-info', null, { status: 'mx' + xhr.status });
     };
 
-    xhr.ontimeout = xhr.onerror = function() { callback('unknown'); };
+    xhr.ontimeout = function() {
+      callback('no-config-info', null, { status: 'mxtimeout' });
+    };
+    xhr.onerror = function() {
+      callback('no-config-info', null, { status: 'mxerror' });
+    };
 
     xhr.send();
   },
@@ -35663,9 +36220,9 @@ Autoconfigurator.prototype = {
    */
   _getConfigFromMX: function getConfigFromMX(domain, callback) {
     let self = this;
-    this._getMX(domain, function(error, mxDomain) {
+    this._getMX(domain, function(error, mxDomain, errorDetails) {
       if (error)
-        return callback(error);
+        return callback(error, null, errorDetails);
 
       // XXX: We need to normalize the domain here to get the base domain, but
       // that's complicated because people like putting dots in TLDs. For now,
@@ -35674,15 +36231,19 @@ Autoconfigurator.prototype = {
       console.log('  Found MX for', mxDomain);
 
       if (domain === mxDomain)
-        return callback('unknown');
+        return callback('no-config-info', null, { status: 'mxsame' });
 
       // If we found a different domain after MX lookup, we should look in our
       // local file store (mostly to support Google Apps domains) and, if that
       // doesn't work, the Mozilla ISPDB.
       console.log('  Looking in local file store');
-      self._getConfigFromLocalFile(mxDomain, function(error, config) {
-        if (!error)
-          return callback(error, config);
+      self._getConfigFromLocalFile(mxDomain, function(error, config,
+                                                      errorDetails) {
+        // (Local XML lookup should not have any fatal errors)
+        if (!error) {
+          callback(error, config, errorDetails);
+          return;
+        }
 
         console.log('  Looking in the Mozilla ISPDB');
         self._getConfigFromDB(mxDomain, callback);
@@ -35716,7 +36277,7 @@ Autoconfigurator.prototype = {
                   .replace('%REALNAME%', userDetails.displayName);
     }
 
-    function onComplete(error, config) {
+    function onComplete(error, config, errorDetails) {
       console.log(error ? 'FAILURE' : 'SUCCESS');
 
       // Fill any placeholder strings in the configuration object we retrieved.
@@ -35733,7 +36294,7 @@ Autoconfigurator.prototype = {
         }
       }
 
-      callback(error, config);
+      callback(error, config, errorDetails);
     }
 
     console.log('  Looking in GELAM');
@@ -35744,19 +36305,26 @@ Autoconfigurator.prototype = {
 
     let self = this;
     console.log('  Looking in local file store');
-    this._getConfigFromLocalFile(domain, function(error, config) {
-      if (self._isSuccessOrFatal(error))
-        return onComplete(error, config);
+    this._getConfigFromLocalFile(domain, function(error, config, errorDetails) {
+      if (self._isSuccessOrFatal(error)) {
+        onComplete(error, config, errorDetails);
+        return;
+      }
 
       console.log('  Looking at domain');
-      self._getConfigFromDomain(userDetails, domain, function(error, config) {
-        if (self._isSuccessOrFatal(error))
-          return onComplete(error, config);
+      self._getConfigFromDomain(userDetails, domain, function(error, config,
+                                                              errorDetails) {
+        if (self._isSuccessOrFatal(error)) {
+          onComplete(error, config, errorDetails);
+          return;
+        }
 
         console.log('  Looking in the Mozilla ISPDB');
-        self._getConfigFromDB(domain, function(error, config) {
-          if (self._isSuccessOrFatal(error))
-            return onComplete(error, config);
+        self._getConfigFromDB(domain, function(error, config, errorDetails) {
+          if (self._isSuccessOrFatal(error)) {
+            onComplete(error, config, errorDetails);
+            return;
+          }
 
           console.log('  Looking up MX');
           self._getConfigFromMX(domain, onComplete);
@@ -35778,9 +36346,9 @@ Autoconfigurator.prototype = {
    */
   tryToCreateAccount: function(universe, userDetails, callback) {
     let self = this;
-    this.getConfig(userDetails, function(error, config) {
+    this.getConfig(userDetails, function(error, config, errorDetails) {
       if (error)
-        return callback(error);
+        return callback(error, null, errorDetails);
 
       var configurator = Configurators[config.type];
       configurator.tryToCreateAccount(universe, userDetails, config,
@@ -36579,7 +37147,8 @@ MailUniverse.prototype = {
    * Self-reporting by an account that it is experiencing difficulties.
    *
    * We mutate its state for it, and generate a notification if this is a new
-   * problem.
+   * problem.  For problems that require user action, we additionally generate
+   * a bad login notification.
    */
   __reportAccountProblem: function(account, problem) {
     // nothing to do if the problem is already known
@@ -36793,7 +37362,7 @@ MailUniverse.prototype = {
    * and transferred across to the non-deferred queue at account-load time.
    */
   _deferOp: function(account, op) {
-    account.deferredMutations.push(op.longtermId);
+    this._opsByAccount[account.id].deferred.push(op.longtermId);
     if (this._deferredOpTimeout !== null)
       this._deferredOpTimeout = window.setTimeout(
         this._boundQueueDeferredOps, $syncbase.DEFERRED_OP_DELAY_MS);

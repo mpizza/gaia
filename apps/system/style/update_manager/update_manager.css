@@ -57,9 +57,9 @@ html, body {
 #update-manager-toaster > .icon {
   float: left;
   display: block;
-  width: 24px;
-  height: 24px;
-  margin: 10px 10px;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin: 1.3rem;
 }
 
 #update-manager-toaster > .message {
@@ -70,6 +70,7 @@ html, body {
   color: #52b8cc;
   font-size: 1.5rem;
   font-weight: 500;
+  line-height: 2.8rem;
 }
 
 #update-manager-container > .message {
@@ -113,23 +114,36 @@ html, body {
   -moz-transform: translateY(0);
 }
 
+#updates-viaDataConnection-dialog,
 #updates-download-dialog {
+  padding-bottom: 4.9rem;
+  padding-top: 0;
   display: none;
 }
 
+#updates-viaDataConnection-dialog.visible,
 #updates-download-dialog.visible {
   display: inline-block;
   pointer-events: auto;
 }
 
+#updates-viaDataConnection-dialog h1,
 #updates-download-dialog h1 {
-  text-transform:capitalize;
   font-size: 1.9rem;
   color: #fff;
-  padding: 0px 10px 11px 10px;
+  padding: 1.5rem 1rem 1.1rem 1rem;
   background: rgba(255, 255, 255, 0.0);
 }
 
+#updates-viaDataConnection-dialog h1 {
+  padding-left: 2.8rem;
+  height: 2.4rem;
+  line-height: 2.4rem;
+  background: url('images/iconindicator_download_24x24.png') no-repeat scroll 0 50% transparent;
+  border: none;
+}
+
+#updates-viaDataConnection-dialog section,
 #updates-download-dialog section {
   height: auto;
   line-height: 3.5rem;
@@ -146,7 +160,6 @@ html, body {
 }
 
 #updates-download-dialog li {
-  line-height: 3rem;
   height: 5rem;
   margin: 0 1rem;
   border-top: solid 1px rgba(255, 255, 255, 0.05);
@@ -159,11 +172,10 @@ html, body {
 
 #updates-download-dialog div {
   display: block;
-  height: 3.5rem;
   font-weight: 500;
   color: #ebebeb;
   font-size: 1.4rem;
-  line-height: 3.5rem;
+  line-height: 0.6rem;
 }
 
 #updates-download-dialog li .name {
@@ -184,17 +196,58 @@ html, body {
 
 #updates-download-dialog label {
   display: inline-block;
-  height: 3.5rem;
+  height: 5rem;
   float: right;
   color: #ebebeb;
-  line-height: 3.5rem;
+  line-height: 5rem;
   font-weight: 300;
   font-size: 1.4rem;
 }
 
 #updates-download-dialog label.required {
   width: 10rem;
-  padding-right: 0.5rem;
+  right: 0.5rem;
   text-align: right;
   text-transform: uppercase;
+  height: 3rem;
+  line-height: 2.9rem;
+}
+
+#updates-download-dialog p {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6.8rem;
+  height: 6.6rem;
+  padding: 0.5rem 1.8rem;
+  margin: 0;
+
+  background-color: rgba(0, 0, 0, 0.4);
+  border-top: solid 1px rgba(255, 255, 255, 0.2);
+  overflow-y: scroll;
+
+  font-size: 1.6rem;
+  white-space: normal;
+}
+
+#updates-download-dialog[data-nowifi="true"] section {
+  /* Fixing at the top of the screen to properly make room for the warning */
+  position: absolute;
+  top: 20px;
+  max-height: calc(100% - 15rem - 20px);
+}
+
+#updates-download-dialog #updates-download-button[data-online="false"] {
+  visibility: collapse;
+}
+
+#updates-download-dialog #updates-offline-warning,
+#updates-download-dialog #updates-data-connection-warning,
+#updates-download-dialog[data-online="false"] #updates-download-button {
+  visibility: collapse;
+}
+
+#updates-download-dialog[data-online="false"] #updates-offline-warning,
+#updates-download-dialog[data-online="true"][data-nowifi="true"][data-data-connection-inline-warning="true"] #updates-data-connection-warning {
+  visibility: visible;
 }

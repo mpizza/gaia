@@ -4,6 +4,16 @@
 const DragDropManager = (function() {
 
   /*
+   * It defines the time (in ms) while checking limits is disabled
+   */
+  var CHECK_LIMITS_DELAY = 700;
+
+  /*
+   * It defines the time (in ms) between consecutive rearranges
+   */
+  var REARRANGE_DELAY = 50;
+
+  /*
    * Drop feature is disabled (in the borders of the icongrid)
    */
   var isDisabledDrop = false;
@@ -20,9 +30,8 @@ const DragDropManager = (function() {
    */
   var disabledCheckingLimitsTimeout = null;
 
-  var draggableIcon,
-      previousOverlapIcon,
-      overlapingTimeout;
+  var draggableIcon, previousOverlapIcon, overlapingTimeout, overlapElem,
+      originElem;
 
   var pageHelper = GridManager.pageHelper;
 
@@ -42,18 +51,26 @@ const DragDropManager = (function() {
         function dg_disabledCheckingLimitsTimeout() {
           isDisabledCheckingLimits = false;
           checkLimits();
-        }
-      , 1000);
+        }, CHECK_LIMITS_DELAY);
     }
-  };
+  }
+
+  var isTouch = 'ontouchstart' in window;
+  var touchmove = isTouch ? 'touchmove' : 'mousemove';
+  var touchend = isTouch ? 'touchend' : 'mouseup';
+
+  var getTouch = (function getTouchWrapper() {
+    return isTouch ? function(e) { return e.touches[0] } :
+                     function(e) { return e };
+  })();
 
   var transitioning = false;
 
   function onNavigationEnd() {
     transitioning = false;
-  };
+  }
 
-  function overDock(overlapElem) {
+  function overDock() {
     if (isDockDisabled) {
       if (!overlapingDock) {
         // If we are coming from grid -> the drop action is disabled
@@ -67,9 +84,8 @@ const DragDropManager = (function() {
     if (!overlapingDock) {
       // I've just entered
       draggableIcon.addClassToDragElement('overDock');
-      var needsRender = false;
-      DockManager.page.appendIcon(draggableIcon, needsRender);
-      drop(overlapElem, DockManager.page);
+      DockManager.page.appendIcon(draggableIcon);
+      drop(DockManager.page);
       previousOverlapIcon = overlapElem;
     }
 
@@ -83,59 +99,45 @@ const DragDropManager = (function() {
   }
 
   function overIconGrid() {
+    if (transitioning) {
+      isDisabledDrop = true;
+      return;
+    }
+
+    isDisabledDrop = false;
     var currentX = currentEvent.x;
+    var curPageObj = pageHelper.getCurrent();
 
     if (overlapingDock) {
       draggableIcon.removeClassToDragElement('overDock');
-      overlapingDock = isDisabledDrop = false;
-      var curPageObj = pageHelper.getCurrent();
-      if (curPageObj.getNumIcons() < pageHelper.maxIconsPerPage) {
-        var needsRender = false;
-        curPageObj.appendIcon(draggableIcon, needsRender);
-      } else {
-        curPageObj.insertBeforeLastIcon(draggableIcon);
-      }
-    } else if (dirCtrl.limitNext(currentX)) {
-      isDisabledDrop = true;
-      if (isDisabledCheckingLimits) {
-        return;
-      }
+      overlapingDock = false;
+      curPageObj.appendIconVisible(draggableIcon);
+    } else if (!isDisabledCheckingLimits) {
+      if (dirCtrl.limitNext(currentX)) {
+        isDisabledDrop = true;
 
-      var curPageObj = pageHelper.getCurrent();
-      if (pageHelper.getCurrentPageNumber() <
-          pageHelper.getTotalPagesNumber() - 1) {
-        pageHelper.getNext().prependIcon(draggableIcon);
+        if (pageHelper.getCurrentPageNumber() <
+            pageHelper.getTotalPagesNumber() - 1) {
+          pageHelper.getNext().appendIconVisible(draggableIcon);
+        } else if (curPageObj.getNumIcons() > 1) {
+          // New page if there are two or more icons
+          pageHelper.addPage([draggableIcon]);
+        }
+
+        setDisabledCheckingLimits(true);
+        if (pageHelper.getNext()) {
+          GridManager.goToNextPage(onNavigationEnd);
+          transitioning = true;
+        }
+      } else if (pageHelper.getCurrentPageNumber() > GridManager.landingPage + 1
+                 && dirCtrl.limitPrev(currentX)) {
+        isDisabledDrop = true;
+
+        pageHelper.getPrevious().appendIconVisible(draggableIcon);
         setDisabledCheckingLimits(true);
         transitioning = true;
-        GridManager.goToNextPage(onNavigationEnd);
-      } else if (curPageObj.getNumIcons() > 1) {
-        // New page if there are two or more icons
-        pageHelper.addPage([draggableIcon]);
-        setDisabledCheckingLimits(true);
-        transitioning = true;
-        GridManager.goToNextPage(onNavigationEnd);
+        GridManager.goToPreviousPage(onNavigationEnd);
       }
-    } else if (dirCtrl.limitPrev(currentX)) {
-      isDisabledDrop = true;
-      if (pageHelper.getCurrentPageNumber() === 2 || isDisabledCheckingLimits) {
-        return;
-      }
-
-      var curPageObj = pageHelper.getCurrent();
-      var prevPageObj = pageHelper.getPrevious();
-      if (prevPageObj.getNumIcons() === pageHelper.maxIconsPerPage) {
-        prevPageObj.insertBeforeLastIcon(draggableIcon);
-      } else {
-        var needsRender = false;
-        prevPageObj.appendIcon(draggableIcon, needsRender);
-      }
-      setDisabledCheckingLimits(true);
-      transitioning = true;
-      GridManager.goToPreviousPage(onNavigationEnd);
-    } else if (transitioning) {
-      isDisabledDrop = true;
-    } else {
-      isDisabledDrop = false;
     }
   }
 
@@ -146,13 +148,13 @@ const DragDropManager = (function() {
    * Furthermore, this method is in charge of creating a new page when
    * it's needed
    */
-  function checkLimits(overlapElem) {
+  function checkLimits() {
     if (currentEvent.y >= limitY) {
       overDock(overlapElem);
     } else {
       overIconGrid();
     }
-  };
+  }
 
   /*
    * This method is executed when dragging starts
@@ -160,6 +162,7 @@ const DragDropManager = (function() {
    * {Object} This is the DOMElement which was tapped and hold
    */
   function onStart(elem) {
+    overlapElem = originElem = elem;
     draggableIcon = GridManager.getIcon(elem.dataset);
     draggableIcon.onDragStart(startEvent.x, startEvent.y);
     if (overlapingDock) {
@@ -167,7 +170,7 @@ const DragDropManager = (function() {
     } else if (DockManager.isFull()) {
       isDockDisabled = true;
     }
-  };
+  }
 
   /*
    * This method is invoked when dragging is finished. It checks if
@@ -188,11 +191,11 @@ const DragDropManager = (function() {
       page.onReArranged = function fn_ready() {
         delete page.onReArranged;
         draggableIcon.onDragStop(callback);
-      }
+      };
     }
-  };
+  }
 
-  function drop(overlapElem, page) {
+  function drop(page) {
     var classList = overlapElem.classList;
     if (classList.contains('icon')) {
       var overlapIcon = GridManager.getIcon(overlapElem.dataset);
@@ -218,11 +221,43 @@ const DragDropManager = (function() {
    *
    * @param {Object} DOMElement behind draggable icon
    */
-  function move(overlapElem) {
-    draggableIcon.onDragMove(currentEvent.x, currentEvent.y);
+  function onMove(evt) {
+    var x = currentEvent.x = getTouch(evt).pageX;
+    var y = currentEvent.y = getTouch(evt).pageY;
+
+    draggableIcon.onDragMove(x, y);
 
     var page = getPage();
     if (!page.ready) {
+      return;
+    }
+
+    var newOverlapElem = overlapElem;
+    if (overlapElem.classList.contains('page')) {
+      // We are on the grid but not icon
+      newOverlapElem = document.elementFromPoint(x, y);
+    } else {
+      // Avoid calling document.elementFromPoint if we are over the same icon
+      var rectObject = overlapElem.getBoundingClientRect();
+      if (overlapElem.classList.contains('page') ||
+          x < rectObject.left || x > rectObject.right ||
+          y < rectObject.top || y > rectObject.bottom) {
+        newOverlapElem = document.elementFromPoint(x, y);
+      }
+    }
+
+    // elementFromPoint can return null in some situations, most notably when
+    // the user's finger goes below the dock, on the soft buttons
+    if (newOverlapElem) {
+      overlapElem = newOverlapElem;
+      handleMove(page, x, y);
+    }
+  }
+
+  function handleMove(page, x, y) {
+    var classList = overlapElem.classList;
+    if (!classList) {
+      clearTimeout(overlapingTimeout);
       return;
     }
 
@@ -232,40 +267,29 @@ const DragDropManager = (function() {
       return;
     }
 
-    var classList = overlapElem.classList;
-    if (!classList) {
-      return;
-    }
-
     if (previousOverlapIcon !== overlapElem) {
       clearTimeout(overlapingTimeout);
       if (classList.contains('page')) {
         var lastIcon = page.getLastIcon();
-        if (currentEvent.y > lastIcon.getTop() && draggableIcon !== lastIcon) {
+        if (y > lastIcon.getTop() && draggableIcon !== lastIcon) {
           page.drop(draggableIcon, lastIcon);
         }
       } else {
-        overlapingTimeout = setTimeout(drop, 500, overlapElem, page);
+        overlapingTimeout = setTimeout(drop, REARRANGE_DELAY, page);
       }
     }
 
     previousOverlapIcon = overlapElem;
   }
 
-  function onMove(evt) {
-    evt.stopPropagation();
-    evt.preventDefault();
-    currentEvent.x = evt.pageX;
-    currentEvent.y = evt.pageY;
-    move(evt.target);
-  }
-
   function onEnd(evt) {
-    evt.stopPropagation();
-    evt.preventDefault();
+    // No multi-touch
+    if (evt.target !== originElem)
+      return;
+
     clearTimeout(overlapingTimeout);
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onEnd);
+    window.removeEventListener(touchmove, onMove);
+    window.removeEventListener(touchend, onEnd);
     stop(function dg_stop() {
       GridManager.onDragStop();
       DockManager.onDragStop();
@@ -293,8 +317,8 @@ const DragDropManager = (function() {
      * @param {Object} DOM event
      */
     start: function ddm_start(evt, initCoords) {
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onEnd);
+      window.addEventListener(touchmove, onMove);
+      window.addEventListener(touchend, onEnd);
       GridManager.onDragStart();
       DockManager.onDragStart();
       startEvent = initCoords;

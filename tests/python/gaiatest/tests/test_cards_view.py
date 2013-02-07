@@ -4,24 +4,27 @@
 
 from gaiatest import GaiaTestCase
 
+from marionette.errors import NoSuchElementException
+
+
 class TestCardsView(GaiaTestCase):
+
+    _app_under_test = "Clock"
 
     # Home/Cards view locators
     _cards_view_locator = ('id', 'cards-view')
-    _calculator_card_locator = ('xpath', "//li[@class='card']/h1[text()='Calculator']")
-
-    # Calculator locators
-    _clear_button_locator = ('xpath', "//input[@value='C']")
+    # Check that the origin contains the current app name, origin is in the format:
+    # app://clock.gaiamobile.org
+    _app_card_locator = ('css selector', '#cards-view li[data-origin*="%s"]' % _app_under_test.lower())
+    _close_button_locator = ('css selector', '#cards-view li[data-origin*="%s"] .close-card' % _app_under_test.lower())
+    _clock_frame_locator = ('css selector', "iframe[mozapp='app://clock.gaiamobile.org/manifest.webapp']")
 
     def setUp(self):
         GaiaTestCase.setUp(self)
 
-        # launch the Calculator app as a basic, reliable
+        # launch the Clock app as a basic, reliable
         # app to test against in Cards View
-        self.calculator = self.apps.launch('Calculator')
-
-        # wait for the Calculator to load
-        self.wait_for_element_displayed(*self._clear_button_locator)
+        self.app = self.apps.launch(self._app_under_test)
 
     def test_cards_view(self):
 
@@ -30,22 +33,22 @@ class TestCardsView(GaiaTestCase):
 
         card_view_element = self.marionette.find_element(*self._cards_view_locator)
         self.assertFalse(card_view_element.is_displayed(),
-            "Card view not expected to be visible")
+                         "Card view not expected to be visible")
 
         self._hold_home_button()
         self.wait_for_element_displayed(*self._cards_view_locator)
 
         self.assertTrue(card_view_element.is_displayed(),
-            "Card view expected to be visible")
+                        "Card view expected to be visible")
 
-        calculator_card = self.marionette.find_element(*self._calculator_card_locator)
-        self.assertTrue(calculator_card.is_displayed())
+        app_card = self.marionette.find_element(*self._app_card_locator)
+        self.assertTrue(app_card.is_displayed())
 
         self._touch_home_button()
         self.wait_for_element_not_displayed(*self._cards_view_locator)
 
         self.assertFalse(card_view_element.is_displayed(),
-            "Card view not expected to be visible")
+                         "Card view not expected to be visible")
 
     def test_that_app_can_be_launched_from_cards_view(self):
         # https://github.com/mozilla/gaia-ui-tests/issues/98
@@ -53,29 +56,52 @@ class TestCardsView(GaiaTestCase):
         # go to the home screen
         self.marionette.switch_to_frame()
         self._touch_home_button()
-        self.wait_for_element_not_displayed(*self._clear_button_locator)
+
+        # find the cards frame htmlelement
+        clock_frame = self.marionette.find_element(*self._clock_frame_locator)
 
         # pull up the cards view
-        self.marionette.switch_to_frame()
         self._hold_home_button()
         self.wait_for_element_displayed(*self._cards_view_locator)
 
-        # launch the calculator from the cards view
-        calc_card = self.marionette.find_element(*self._calculator_card_locator)
-        calc_card.click()
-        self.marionette.switch_to_frame(self.calculator.frame_id)
-        self.wait_for_element_displayed(*self._clear_button_locator)
+        self.assertFalse(clock_frame.is_displayed(),
+            "Clock frame expected to be not displayed but was")
+
+        # launch the app from the cards view
+        app_card = self.marionette.find_element(*self._app_card_locator)
+        self.marionette.tap(app_card)
+
+        self.wait_for_element_not_displayed(*self._cards_view_locator)
+
+        self.assertTrue(clock_frame.is_displayed(),
+            "Clock frame was expected to be displayed but was not")
+
+    def test_kill_app_from_cards_view(self):
+        # go to the home screen
+        self.marionette.switch_to_frame()
+        self._touch_home_button()
+
+        # pull up the cards view
+        self._hold_home_button()
+        self.wait_for_element_displayed(*self._cards_view_locator)
+
+        # Find the close icon for the current app
+        close_button = self.marionette.find_element(*self._close_button_locator)
+        self.marionette.tap(close_button)
+
+        self.marionette.switch_to_frame()
+
+        # pull up the cards view again
+        self._hold_home_button()
+        self.wait_for_element_displayed(*self._cards_view_locator)
+
+        # If we successfully killed the app, we should no longer find the app
+        # card inside cards view.
+        self.assertRaises(NoSuchElementException, self.marionette.find_element,
+                *self._app_card_locator)
 
     def _hold_home_button(self):
         self.marionette.execute_script("window.wrappedJSObject.dispatchEvent(new Event('holdhome'));")
 
     def _touch_home_button(self):
         self.marionette.execute_script("window.wrappedJSObject.dispatchEvent(new Event('home'));")
-
-    def tearDown(self):
-
-        # close the app
-        if hasattr(self, 'calculator'):
-            self.apps.kill(self.calculator)
-
-        GaiaTestCase.tearDown(self)

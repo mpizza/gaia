@@ -12,7 +12,8 @@
     "systemXHR":{},
     "settings":{ "access": "readwrite" },
     "device-storage:pictures":{ "access": "readonly" },
-    "open-remote-window":{}
+    "open-remote-window":{},
+    "geolocation": {}
   },
   "locales": {
     "ar": {
@@ -37,8 +38,12 @@
   "activities": {
     "save-bookmark": {
       "filters": {
-        "type": "url"
-      }
+        "type": "url",
+        "url": { "required":true, "regexp":"/^https?:/" }
+      },
+      "disposition": "inline",
+      "href": "/save-bookmark.html",
+      "returnValue": true
     }
   }
 }

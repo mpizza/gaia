@@ -127,11 +127,14 @@ fb.friend2mozContact = function(f) {
 
   if (Array.isArray(f.phones) && f.phones.length > 0) {
     f.tel = [];
+    f.shortTelephone = [];
     f.phones.forEach(function(aphone) {
       f.tel.push({
         type: [privateType],
         value: normalizeFbPhoneNumber(aphone)
       });
+      // Enabling to find FB phones by short number
+      f.shortTelephone.push(aphone.number);
     });
   }
 
@@ -177,11 +180,11 @@ fb.getBirthDate = function getBirthDate(sbday) {
 
   var syear = sbday.substring(iyear + 1, sbday.length);
 
-  out.setDate(parseInt(sday));
-  out.setMonth(parseInt(smonth) - 1, parseInt(sday));
+  out.setDate(parseInt(sday, 10));
+  out.setMonth(parseInt(smonth, 10) - 1, parseInt(sday, 10));
 
   if (syear && syear.length > 0) {
-    out.setYear(parseInt(syear));
+    out.setYear(parseInt(syear, 10));
   }
 
   return out;
@@ -325,7 +328,7 @@ fb.utils.Request = function() {
         this.onsuccess(ev);
       }.bind(this), 0);
     }
-  }
+  };
 
   this.failed = function(error) {
     this.error = error;
@@ -336,5 +339,5 @@ fb.utils.Request = function() {
         this.onerror(ev);
       }.bind(this), 0);
     }
-  }
+  };
 };

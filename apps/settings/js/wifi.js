@@ -4,7 +4,7 @@
 'use strict';
 
 // handle Wi-Fi settings
-onLocalized(function wifiSettings() {
+navigator.mozL10n.ready(function wifiSettings() {
   var _ = navigator.mozL10n.get;
 
   var settings = window.navigator.mozSettings;
@@ -42,7 +42,12 @@ onLocalized(function wifiSettings() {
 
   // toggle wifi on/off
   gWifiCheckBox.onchange = function toggleWifi() {
-    settings.createLock().set({'wifi.enabled': this.checked});
+    var req = settings.createLock().set({'wifi.enabled': this.checked});
+    this.disabled = true;
+    req.onerror = function() {
+      // Fail to write mozSettings, return toggle control to the user.
+      gWifiCheckBox.disabled = false;
+    };
   };
 
   /**
@@ -63,7 +68,7 @@ onLocalized(function wifiSettings() {
    */
 
   var gScanStates = new Set(['connected', 'connectingfailed', 'disconnected']);
-  gWifiManager.onstatuschange = function(event) {
+  Connectivity.wifiStatusChange = function(event) {
     updateNetworkState();
 
     if (gScanStates.has(event.status)) {
@@ -75,15 +80,15 @@ onLocalized(function wifiSettings() {
     }
   };
 
-  gWifiManager.onenabled = function onWifiEnabled() {
-    // enable UI toogle
+  Connectivity.wifiEnabled = function onWifiEnabled() {
+    // Re-enable UI toggle
     gWifiCheckBox.disabled = false;
     updateNetworkState();
     gNetworkList.scan();
   };
 
-  gWifiManager.ondisabled = function onWifiDisabled() {
-    // enable UI toogle
+  Connectivity.wifiDisabled = function onWifiDisabled() {
+    // Re-enable UI toggle
     gWifiCheckBox.disabled = false;
     gWifiInfoBlock.textContent = _('disabled');
     gNetworkList.clear(false);
@@ -509,10 +514,12 @@ onLocalized(function wifiSettings() {
     function wifiConnect() {
       gCurrentNetwork = network;
       gWifiManager.associate(network);
+      settings.createLock().set({'wifi.connect_via_settings': true});
       gNetworkList.display(network, _('shortStatus-connecting'));
     }
 
     function wifiDisconnect() {
+      settings.createLock().set({'wifi.connect_via_settings': false});
       gWifiManager.forget(network);
       gNetworkList.display(network, _('shortStatus-disconnected'));
       // get available network list
@@ -677,6 +684,7 @@ onLocalized(function wifiSettings() {
         _('fullStatus-' + networkStatus, gWifiManager.connection.network);
 
     if (networkStatus === 'connectingfailed' && gCurrentNetwork) {
+      settings.createLock().set({'wifi.connect_via_settings': false});
       // connection has failed, probably an authentication issue...
       delete(gCurrentNetwork.password);
       gWifiManager.forget(gCurrentNetwork); // force a new authentication dialog
@@ -726,9 +734,6 @@ onLocalized(function wifiSettings() {
   settings.addObserver('wifi.enabled', function(event) {
     if (lastMozSettingValue == event.settingValue)
       return;
-
-    // lock UI toggle
-    gWifiCheckBox.disabled = true;
 
     lastMozSettingValue = event.settingValue;
     setMozSettingsEnabled(event.settingValue);

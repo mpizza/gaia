@@ -630,7 +630,7 @@ li[role="tab"] a {
   outline: none;
   margin-left: -30px;
   text-overflow: ellipsis;
-  max-width: calc(33% - 37px);
+  max-width: calc(33% - 39px);
   overflow: hidden;
 }
 
@@ -878,6 +878,9 @@ li[role="listitem"] small {
 
 #settings li button {
   margin: 0;
+  height: auto;
+  line-height: 2rem;
+  padding: 1rem 1.5rem;
 }
 
 
@@ -963,20 +966,6 @@ li[role="listitem"] small {
   text-transform: uppercase;
   font-size: 1.4rem;
  }
-
- #bookmark-entry-sheet input[type="text"],
- #bookmark-entry-sheet input[type="url"],
- #http-authentication-dialog input[type="text"],
- #http-authentication-dialog input[type="password"] {
-  -moz-box-sizing: border-box;
-  border: 1px solid #D1D1D1;
-  border-radius: 0.3rem;
-  display: block;
-  font: 1.4rem/4rem "MozTT", Sans-serif;
-  height: 4rem;
-  padding: 0 0.5rem;
-  width: 100%;
-}
 
 /* This is a dirty hack to hide the bottom toolbar while
  * the keyboard is active, than device-height - 40px 

@@ -2,10 +2,29 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+'use strict';
+
 var GaiaApps = {
 
   normalizeName: function(name) {
     return name.replace(/[- ]+/g, '').toLowerCase();
+  },
+
+  getRunningApps: function() {
+    let runningApps = window.wrappedJSObject.WindowManager.getRunningApps();
+    // Return a simplified version of the runningApps object which can be
+    // JSON-serialized.
+    let apps = {};
+    for (let app in runningApps) {
+        let anApp = {};
+        for (let key in runningApps[app]) {
+            if (['name', 'origin', 'manifest'].indexOf(key) > -1) {
+                anApp[key] = runningApps[app][key];
+            }
+        }
+        apps[app] = anApp;
+    }
+    return apps;
   },
 
   getRunningAppOrigin: function(name) {
@@ -21,7 +40,31 @@ var GaiaApps = {
     return origin;
   },
 
-  locateWithName: function(name, callback=marionetteScriptFinished) {
+  getPermission: function(appName, permissionName) {
+    GaiaApps.locateWithName(appName, function(app) {
+      console.log("Getting permission '" + permissionName + "' for " + appName);
+      var mozPerms = navigator.mozPermissionSettings;
+      var result = mozPerms.get(
+        permissionName, app.manifestURL, app.origin, false
+      );
+      marionetteScriptFinished(result);
+    });
+  },
+
+  setPermission: function(appName, permissionName, value) {
+    GaiaApps.locateWithName(appName, function(app) {
+      console.log("Setting permission '" + permissionName + "' for " +
+        appName + "to '" + value + "'");
+      var mozPerms = navigator.mozPermissionSettings;
+      mozPerms.set(
+        permissionName, value, app.manifestURL, app.origin, false
+      );
+      marionetteScriptFinished();
+    });
+  },
+
+  locateWithName: function(name, aCallback) {
+    var callback = aCallback || marionetteScriptFinished;
     function sendResponse(app, appName, entryPoint) {
       if (callback === marionetteScriptFinished) {
         if (typeof(app) === 'object') {
@@ -67,7 +110,7 @@ var GaiaApps = {
         }
       }
       callback(false);
-    }
+    };
   },
 
   // Returns the number of running apps.
@@ -149,33 +192,31 @@ var GaiaApps = {
 
         app.launch(entryPoint || null);
 
-        function sendResponse(origin) {
-          let app = runningApps[origin];
-          marionetteScriptFinished({frame: app.frame.id,
-                                    src: app.frame.src,
-                                    name: app.name,
-                                    origin: origin});
-        }
-
         waitFor(
           function() {
+            let app = runningApps[origin];
+            let result = {frame: app.frame.firstChild,
+                          src: app.iframe.src,
+                          name: app.name,
+                          origin: origin};
+
             if (alreadyRunning) {
               // return the app's frame id
-              sendResponse(origin);
+              marionetteScriptFinished(result);
             }
             else {
               // wait until the new iframe sends the mozbrowserfirstpaint event
-              let frame = runningApps[origin].frame;
+              let frame = runningApps[origin].frame.firstChild;
               if (frame.dataset.unpainted) {
                 window.addEventListener('mozbrowserfirstpaint',
-                                        function firstpaint() {
-                  window.removeEventListener('mozbrowserfirstpaint',
-                                             firstpaint);
-                  sendResponse(origin);
+                    function firstpaint() {
+                      window.removeEventListener('mozbrowserfirstpaint',
+                                                 firstpaint);
+                      marionetteScriptFinished(result);
                 });
               }
               else {
-                sendResponse(origin);
+                marionetteScriptFinished(result);
               }
             }
           },
@@ -192,11 +233,11 @@ var GaiaApps = {
   },
 
   /**
-   * Uninstalls the app with the speciifed name.
+   * Uninstalls the app with the specified name.
    */
   uninstallWithName: function(name) {
     GaiaApps.locateWithName(name, function uninstall(app) {
-      app.uninstall();
+      navigator.mozApps.mgmt.uninstall(app);
       marionetteScriptFinished(false);
     });
   }

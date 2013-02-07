@@ -1,14 +1,42 @@
 'use strict';
 
 var WifiManager = {
-
   init: function wn_init() {
     if ('mozWifiManager' in window.navigator) {
       this.api = window.navigator.mozWifiManager;
       this.changeStatus();
+      // Ensure that wifi is on.
+      var lock = window.navigator.mozSettings.createLock();
+      this.enable(lock);
+      this.enableDebugging(lock);
+
       this.gCurrentNetwork = this.api.connection.network;
+      if (this.gCurrentNetwork !== null) {
+        this.api.forget(this.gCurrentNetwork);
+        this.gCurrentNetwork = null;
+      }
     }
   },
+
+  isConnectedTo: function wn_isConnectedTo(network) {
+    /**
+     * XXX the API should expose a 'connected' property on 'network',
+     * and 'gWifiManager.connection.network' should be comparable to 'network'.
+     * Until this is properly implemented, we just compare SSIDs and
+     * capabilities to tell wether the network is already connected or not.
+     */
+    if (!this.api) {
+      return false;
+    }
+    var currentNetwork = this.api.connection.network;
+    if (!currentNetwork || this.api.connection.status != 'connected')
+      return false;
+    var key = network.ssid + '+' + network.capabilities.join('+');
+    var curkey = currentNetwork.ssid + '+' +
+        currentNetwork.capabilities.join('+');
+    return (key == curkey);
+  },
+
   scan: function wn_scan(callback) {
     if ('mozWifiManager' in window.navigator) {
       var req = WifiManager.api.getNetworks();
@@ -18,7 +46,7 @@ var WifiManager = {
         callback(self.networks);
       };
       req.onerror = function onScanError() {
-        console.log('Error reading networks: ' + req.error);
+        console.log('Error reading networks: ' + req.error.name);
       };
     } else {
       var fakeNetworks = [
@@ -55,9 +83,24 @@ var WifiManager = {
       callback(fakeNetworks);
     }
   },
-  enable: function wn_enable(firstTime) {
-    var settings = window.navigator.mozSettings;
-    settings.createLock().set({'wifi.enabled': true});
+  enable: function wn_enable(lock) {
+    lock.set({'wifi.enabled': true});
+  },
+  enableDebugging: function wn_enableDebugging(lock) {
+    // For bug 819947: turn on wifi debugging output to help track down a bug
+    // in wifi. We turn on wifi output only while the FTU app is active.
+    this._prevDebuggingValue = false;
+    var req = lock.get('wifi.debugging.enabled');
+    req.onsuccess = function wn_getDebuggingSuccess() {
+      this._prevDebuggingValue = req.result['wifi.debugging.enabled'];
+    };
+    lock.set({ 'wifi.debugging.enabled': true });
+  },
+  finish: function wn_finish() {
+    if (!this._prevDebuggingValue) {
+      var resetLock = window.navigator.mozSettings.createLock();
+      resetLock.set({'wifi.debugging.enabled': false});
+    }
   },
   getNetwork: function wm_gn(ssid) {
     var network;
@@ -84,6 +127,7 @@ var WifiManager = {
           }
       } else {
         // Connect directly
+        this.gCurrentNetwork = network;
         this.api.associate(network);
         return;
       }
@@ -112,9 +156,9 @@ var WifiManager = {
     WifiManager.api.onstatuschange = function(event) {
       UIManager.updateNetworkStatus(self.ssid, event.status);
       if (event.status == 'connected') {
-        self.isConnected = true;
-      } else {
-        self.isConnected = false;
+        if (self.networks && self.networks.length) {
+          UIManager.renderNetworks(self.networks);
+        }
       }
     };
 
@@ -122,13 +166,13 @@ var WifiManager = {
 
   getSecurityType: function wn_gst(network) {
     var key = network.capabilities[0];
-        if (/WEP$/.test(key))
-          return 'WEP';
-        if (/PSK$/.test(key))
-          return 'WPA-PSK';
-        if (/EAP$/.test(key))
-          return 'WPA-EAP';
-        return false;
+    if (/WEP$/.test(key))
+      return 'WEP';
+    if (/PSK$/.test(key))
+      return 'WPA-PSK';
+    if (/EAP$/.test(key))
+      return 'WPA-EAP';
+    return false;
   },
   isUserMandatory: function wn_ium(ssid) {
     var network = this.getNetwork(ssid);
@@ -141,5 +185,5 @@ var WifiManager = {
     }
     return true;
   }
-
 };
+

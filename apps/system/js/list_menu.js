@@ -23,6 +23,7 @@ var ListMenu = {
     window.addEventListener('click', this, true);
     window.addEventListener('screenchange', this, true);
     window.addEventListener('home', this);
+    window.addEventListener('holdhome', this);
   },
 
   // Pass an array of list items and handler for clicking on the items
@@ -60,14 +61,10 @@ var ListMenu = {
       var button = document.createElement('a');
       button.setAttribute('role', 'button');
       if (item.type && item.type == 'menu') {
-        this.currentLevel += 1;
-        this.currentParent = containerDiv.id;
-        this.buildMenu(item.items);
-        this.currentLevel -= 1;
-        item_div.classList.add('submenu');
-
-        button.href = '#' + this.currentChild;
-        button.textContent = item.label;
+        // XXX: We disallow multi-level menu at this moment
+        // See https://bugzilla.mozilla.org/show_bug.cgi?id=824928
+        // for UX design and dev implementation tracking
+        return;
       } else if (item.type && item.type == 'menuitem') {
         button.dataset.value = item.id;
         button.textContent = item.label;
@@ -128,19 +125,24 @@ var ListMenu = {
       return;
 
     var self = this;
-    this.container.addEventListener('transitionend',
-      function onTransitionEnd() {
-        self.element.classList.remove('visible');
-        self.container.removeEventListener('transitionend', onTransitionEnd);
-      });
-    this.container.classList.add('slidedown');
+    var container = this.container;
+    container.addEventListener('transitionend', function list_hide() {
+      container.removeEventListener('transitionend', list_hide);
+      self.element.classList.remove('visible');
+    });
+
+    setTimeout(function() {
+      container.classList.add('slidedown');
+    });
   },
 
   handleEvent: function lm_handleEvent(evt) {
     switch (evt.type) {
       case 'screenchange':
-        if (!evt.detail.screenEnabled)
+        if (!evt.detail.screenEnabled) {
           this.hide();
+          this.oncancel();
+        }
         break;
 
       case 'click':
@@ -164,10 +166,12 @@ var ListMenu = {
         break;
 
       case 'home':
-        if (this.visible) {
-          this.hide();
-          this.oncancel();
-        }
+      case 'holdhome':
+        if (!this.visible)
+          return;
+
+        this.hide();
+        this.oncancel();
         break;
     }
   }

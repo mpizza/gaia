@@ -175,6 +175,10 @@ suite('dialer/handled_call', function() {
       assert.equal(subject.directionNode.className,
                    'direction outgoing ongoing-out');
     });
+
+    test('occupied', function() {
+      assert.equal(fakeNode.dataset.occupied, 'true');
+    });
   });
 
   suite('on connect', function() {
@@ -243,12 +247,12 @@ suite('dialer/handled_call', function() {
       assert.isTrue(mockCall._listenerRemoved);
     });
 
-    test('hide the node', function() {
-      assert.isTrue(fakeNode.hidden);
-    });
-
     test('clear the ticker', function() {
       assert.equal(subject._ticker, null);
+    });
+
+    test('occupied', function() {
+      assert.equal(fakeNode.dataset.occupied, 'false');
     });
   });
 
@@ -345,6 +349,14 @@ suite('dialer/handled_call', function() {
       mockCall._disconnect();
       assert.equal(subject.recentsEntry.type, 'incoming-refused');
     });
+
+    test('show should do nothing', function() {
+      subject.show(); // will trigger a js error if failing
+    });
+
+    test('hide should do nothing', function() {
+      subject.hide(); // will trigger a js error if failing
+    });
   });
 
   test('should display unknown l10n key', function() {
@@ -369,6 +381,20 @@ suite('dialer/handled_call', function() {
 
       var additionalInfoNode = fakeNode.querySelector('.additionalContactInfo');
       assert.equal('', additionalInfoNode.textContent);
+    });
+  });
+
+  suite('explicit visibility', function() {
+    test('calling show should show the node', function() {
+      subject.node.hidden = true;
+      subject.show();
+      assert.isFalse(subject.node.hidden);
+    });
+
+    test('calling hide should hide the node', function() {
+      subject.node.hidden = false;
+      subject.hide();
+      assert.isTrue(subject.node.hidden);
     });
   });
 });

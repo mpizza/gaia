@@ -1,19 +1,6 @@
 'use strict';
 
 var CallHandler = (function callHandler() {
-  var telephony = navigator.mozTelephony;
-  telephony.oncallschanged = function oncallschanged() {
-    if (callScreenWindowLoaded) {
-      if (telephony.calls.length === 0)
-        // Calls might be ended before callscreen registers call-related
-        // events. We send a message to notify callscreen of exiting when
-        // there are no calls.
-        sendCommandToCallScreen('*', 'exitCallScreen');
-    }
-  };
-
-  var conn = navigator.mozMobileConnection;
-
   var callScreenWindow = null;
   var callScreenWindowLoaded = false;
   var currentActivity = null;
@@ -41,7 +28,7 @@ var CallHandler = (function callHandler() {
     var number = activity.source.data.number;
     var fillNumber = function actHandleDisplay() {
       if (number) {
-        KeypadManager.updatePhoneNumber(number);
+        KeypadManager.updatePhoneNumber(number, 'begin', false);
         if (window.location.hash != '#keyboard-view') {
           window.location.hash = '#keyboard-view';
         }
@@ -51,8 +38,8 @@ var CallHandler = (function callHandler() {
     if (document.readyState == 'complete') {
       fillNumber();
     } else {
-      window.addEventListener('localized', function loadWait() {
-        window.removeEventListener('localized', loadWait);
+      window.addEventListener('load', function loadWait() {
+        window.removeEventListener('load', loadWait);
         fillNumber();
       });
     }
@@ -101,27 +88,42 @@ var CallHandler = (function callHandler() {
 
   /* === Recents support === */
   function handleRecentAddRequest(entry) {
-    RecentsDBManager.init(function() {
-      RecentsDBManager.add(entry, function() {
-        RecentsDBManager.close();
-
-        if (Recents) {
+    Recents.load(function recentsLoaded() {
+      RecentsDBManager.init(function() {
+        RecentsDBManager.add(entry, function() {
+          RecentsDBManager.close();
           Recents.refresh();
-        }
+        });
       });
     });
   }
 
+  /* === Handle messages recevied from iframe === */
+  function handleContactsIframeRequest(message) {
+    switch (message) {
+      case 'back':
+        var contactsIframe = document.getElementById('iframe-contacts');
+        // disable the function of receiving the messages posted from the iframe
+        contactsIframe.contentWindow.history.pushState(null, null, '/contacts/index.html');
+        window.location.hash = '#recents-view';
+        break;
+    }
+  }
+
   /* === Incoming and STK calls === */
   function newCall() {
+    // We need to query mozTelephony a first time here
+    // see bug 823958
+    var telephony = navigator.mozTelephony;
+
     openCallScreen();
   }
   window.navigator.mozSetMessageHandler('telephony-new-call', newCall);
 
   /* === Bluetooth Support === */
   function btCommandHandler(message) {
-    var command = message['bluetooth-dialer-command'];
-
+    var command = message['command'];
+    var partialCommand = command.substring(0, 3);
     if (command === 'BLDN') {
       RecentsDBManager.init(function() {
         RecentsDBManager.getLast(function(lastRecent) {
@@ -130,6 +132,10 @@ var CallHandler = (function callHandler() {
           }
         });
       });
+      return;
+    } else if (partialCommand === 'ATD') {
+      var phoneNumber = command.substring(3);
+      CallHandler.call(phoneNumber);
       return;
     }
 
@@ -183,6 +189,8 @@ var CallHandler = (function callHandler() {
       handleNotificationRequest(data.number);
     } else if (data.type && data.type === 'recent') {
       handleRecentAddRequest(data.entry);
+    } else if (data.type && data.type === 'contactsiframe') {
+      handleContactsIframeRequest(data.message);
     }
   }
   window.addEventListener('message', handleMessage);
@@ -194,106 +202,33 @@ var CallHandler = (function callHandler() {
       return;
     }
 
-    var settings = window.navigator.mozSettings, req;
-    if (settings) {
-      var settingsLock = settings.createLock();
-      req = settingsLock.get('ril.radio.disabled');
-      req.addEventListener('success', function onsuccess() {
-        var status = req.result['ril.radio.disabled'];
-        if (!status) {
-          startDial(number);
-        } else {
-          handleFlightMode();
-        }
-      });
-    } else {
-      startDial(number);
-    }
-  }
-
-  function startDial(number) {
-    var sanitizedNumber = number.replace(/-/g, '');
-    if (telephony) {
-      var call = telephony.dial(sanitizedNumber);
-
-      if (call) {
-        var cb = function clearPhoneView() {
-          KeypadManager.updatePhoneNumber('');
-        };
-        call.onconnected = cb;
-        call.ondisconnected = cb;
-        call.onerror = handleError;
-
-         if (!callScreenWindow)
-          openCallScreen();
+    var oncall = function t_oncall() {
+      if (!callScreenWindow) {
+        openCallScreen(opened);
       }
-    }
-  }
+    };
 
-  function handleFlightMode() {
-    LazyL10n.get(function localized(_) {
-      ConfirmDialog.show(
-        _('callAirplaneModeTitle'),
-        _('callAirplaneModeMessage'),
-        {
-          title: _('cancel'),
-          callback: function() {
-            ConfirmDialog.hide();
+    var connected, disconnected = function clearPhoneView() {
+      KeypadManager.updatePhoneNumber('', 'begin', true);
+    };
 
-            if (currentActivity) {
-              currentActivity.postError('canceled');
-              currentActivity = null;
-            }
-          }
-        },
-        {
-          title: _('settings'),
-          callback: function() {
-            var activity = new MozActivity({
-              name: 'configure',
-                data: {
-                  target: 'device',
-                  section: 'root'
-                }
-              }
-            );
-            ConfirmDialog.hide();
-          }
-        }
-      );
-    });
-  }
+    var shouldCloseCallScreen = false;
 
-  function handleError(event) {
-    LazyL10n.get(function localized(_) {
-      var erName = event.call.error.name, emgcyDialogBody,
-          errorRecognized = false;
+    var error = function() {
+      shouldCloseCallScreen = true;
+    };
 
-      if (erName === 'BadNumberError') {
-        errorRecognized = true;
-        emgcyDialogBody = 'emergencyDialogBodyBadNumber';
-      } else if (erName === 'DeviceNotAcceptedError') {
-        errorRecognized = true;
-        emgcyDialogBody = 'emergencyDialogBodyDeviceNotAccepted';
+    var opened = function() {
+      if (shouldCloseCallScreen) {
+        sendCommandToCallScreen('*', 'exitCallScreen');
       }
+    };
 
-      if (errorRecognized) {
-        ConfirmDialog.show(
-          _('emergencyDialogTitle'),
-          _(emgcyDialogBody),
-          {
-            title: _('emergencyDialogBtnOk'),
-            callback: function() {
-              ConfirmDialog.hide();
-            }
-          }
-        );
-      }
-    });
+    TelephonyHelper.call(number, oncall, connected, disconnected, error);
   }
 
   /* === Attention Screen === */
-  function openCallScreen() {
+  function openCallScreen(openCallback) {
     if (callScreenWindow)
       return;
 
@@ -306,10 +241,18 @@ var CallHandler = (function callHandler() {
                   'call_screen', 'attention');
       callScreenWindow.onload = function onload() {
         callScreenWindowLoaded = true;
-        if (telephony.calls.length === 0) {
+        if (openCallback) {
+          openCallback();
+        }
+      };
+
+      var telephony = navigator.mozTelephony;
+      telephony.oncallschanged = function (evt) {
+        if (callScreenWindowLoaded && telephony.calls.length === 0) {
           // Calls might be ended before callscreen is comletedly loaded,
           // so that callscreen will miss call-related events. We send a
-          // message to notify callscreen of exiting when there are no calls.
+          // message to notify callscreen of exiting when we got notified
+          // there are no calls.
           sendCommandToCallScreen('*', 'exitCallScreen');
         }
       };
@@ -343,6 +286,10 @@ var CallHandler = (function callHandler() {
     callScreenWindow = null;
     callScreenWindowLoaded = false;
   }
+
+  /* === USSD === */
+  window.navigator.mozSetMessageHandler('ussd-received',
+                                        UssdManager.openUI.bind(UssdManager));
 
   return {
     call: call

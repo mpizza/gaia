@@ -95,7 +95,9 @@
 </head>
 
 <body role="application" class="loading">
-
+<section id="errors" role="status">
+  <p class="errors"></p>
+</section>
 <nav class="skin-organic" id="settings" role="region">
 
   <header>
@@ -171,8 +173,15 @@
   </section>
 
   <section id="week-view">
-    <ol class="sidebar"></ol>
-    <section class="children"></section>
+    <section class="sticky">
+      <section class="children">
+        <span class="all-day" data-l10n-id="hour-allday">All Day</span>
+      </section>
+    </section>
+    <div class="scroll">
+      <ol class="sidebar"></ol>
+      <section class="children"></section>
+    </div>
   </section>
 
   <menu id="view-selector">
@@ -220,8 +229,8 @@
 
   <header>
     <menu type="toolbar">
-      <a href="/settings/" data-l10n-id="done">
-        <span>Done</span>
+      <a href="/settings/">
+        <span data-l10n-id="done">Done</span>
       </a>
     </menu>
     <h1 data-l10n-id="advanced-settings-header">Calendar Settings</h1>
@@ -267,7 +276,8 @@
 
     <menu type="toolbar">
       <button class="save">
-        <span data-l10n-id="save">Save</span>
+        <span data-l10n-id="save" class="save-text">Save</span>
+        <span data-l10n-id="done" class="done-text">Done</span>
       </button>
     </menu>
 
@@ -388,7 +398,7 @@
 
   <form role="dialog" data-type="confirm" id="remove-account-dialog">
     <section>
-      <h1 data-l10n-id="remove-account-dialog">>Remove Account</h1>
+      <h1 data-l10n-id="remove-account-dialog">Remove Account</h1>
       <p data-l10n-id="remove-account-dialog-details">
         Removing this account will also remove your local copy of associated calendars and events.
       </p>

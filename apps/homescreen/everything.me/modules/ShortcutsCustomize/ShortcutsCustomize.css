@@ -1,4 +1,4 @@
-#shortcuts-select {
+#evmeContainer #shortcuts-select {
     position: absolute;
     top: 0;
     left: 0;
@@ -22,7 +22,7 @@
     }
 }
 
-#shortcuts-customize-loading {
+#evmeContainer #shortcuts-customize-loading {
     position: absolute;
     top: 0;
     left: 0;
@@ -34,8 +34,7 @@
       url(../../images/shared/pattern.png) repeat left top,
       url(../../images/shared/gradient.png) no-repeat left top / 100% 100%;
 }
-    #shortcuts-customize-loading:before {
-        content: "Loading...";
+    #evmeContainer #shortcuts-customize-loading b {
         position: absolute;
         top: 50%;
         left: 0;
@@ -48,21 +47,16 @@
         font-weight: 300;
         font-size: 38px;
     }
-    #shortcuts-customize-loading:after {
-        content: "";
-        background: transparent url(../../images/spin.png) 50% 50% no-repeat;
+    #evmeContainer #shortcuts-customize-loading .loading-wrapper {
         position: absolute;
         top: 50%;
-        left: 50%;
-        height: 18px;
-        width: 18px;
-        margin: 36px 0 0 -9px;
-        -moz-animation: spin 1500ms infinite linear;
-        animation: spin 1500ms infinite linear;
+        left: 0;
+        right: 0;
+        margin-top: 40px;
     }
     
     
-#shortcuts-customize-loading menu {
+#evmeContainer #shortcuts-customize-loading menu {
   margin: 0;
   padding: 0;
   width: auto;
@@ -73,7 +67,7 @@
   right: 0;
   bottom: 0;
 }
-    #shortcuts-customize-loading menu button {
+    #evmeContainer #shortcuts-customize-loading menu button {
       width: calc(100% - 5rem);
       height: 4rem;
       -moz-box-sizing: border-box;
@@ -96,7 +90,7 @@
       border: solid 1px rgba(0, 0, 0, 0.25);
     }
 
-    #shortcuts-customize-loading menu button:last-child {
+    #evmeContainer #shortcuts-customize-loading menu button:last-child {
       text-shadow: 1px 1px 0 rgba(255,255,255,0.3);
       color: #333;
       background-image: url(action_menu/images/ui/default.png);
@@ -107,7 +101,7 @@
       text-align: center;
       font-size: 1.6rem;
     }
-        #shortcuts-customize-loading menu button:last-child:before {
+        #evmeContainer #shortcuts-customize-loading menu button:last-child:before {
           content: '';
           position: absolute;
           width: 100%;
@@ -120,33 +114,13 @@
         }
 
 /* Press state */
-#shortcuts-customize-loading menu button:active {
+#evmeContainer #shortcuts-customize-loading menu button:active {
   background-color: #006f86;
   color: #333;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-#shortcuts-customize-loading menu button:last-child:active {
+#evmeContainer #shortcuts-customize-loading menu button:last-child:active {
   border: solid 1px #008aaa;
   background: #008aaa;
   color: #333;
-}
-
-
-    
-@-moz-keyframes spin {
-    from {
-        -moz-transform: rotate(0deg) translateZ(0px);
-    }
-    to {
-        -moz-transform: rotate(360deg) translateZ(0px);
-    }
-}
-
-@keyframes spin {
-    from {
-        -moz-transform: rotate(0deg) translateZ(0px);
-    }
-    to {
-        -moz-transform: rotate(360deg) translateZ(0px);
-    }
 }

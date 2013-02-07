@@ -10,11 +10,13 @@ var SimPinDialog = {
 
   pinArea: document.getElementById('pinArea'),
   pukArea: document.getElementById('pukArea'),
+  nckArea: document.getElementById('nckArea'),
   newPinArea: document.getElementById('newPinArea'),
   confirmPinArea: document.getElementById('confirmPinArea'),
 
   pinInput: null,
   pukInput: null,
+  nckInput: null,
   newPinInput: null,
   confirmPinInput: null,
 
@@ -33,6 +35,7 @@ var SimPinDialog = {
     var valueEntered = '';
     var inputField = document.querySelector('input[name="' + name + '"]');
     var displayField = document.querySelector('input[name="' + name + 'Vis"]');
+    var codeMaxLength = parseInt(inputField.getAttribute('maxlength'), 10);
     var self = this;
 
     inputField.addEventListener('keypress', function(evt) {
@@ -41,13 +44,13 @@ var SimPinDialog = {
       evt.preventDefault();
 
       var code = evt.charCode;
-      if (code !== 0 && code < 0x30 && code > 0x39)
+      if (code !== 0 && (code < 0x30 || code > 0x39))
         return;
 
       if (code === 0) { // backspace
         valueEntered = valueEntered.substr(0, valueEntered.length - 1);
       } else {
-        if (valueEntered.length >= 8)
+        if (valueEntered.length >= codeMaxLength)
           return;
         valueEntered += String.fromCharCode(code);
       }
@@ -92,7 +95,7 @@ var SimPinDialog = {
       case 'pinRequired':
         this.lockType = 'pin';
         this.errorMsg.hidden = true;
-        this.inputFieldControl(true, false, false);
+        this.inputFieldControl(true, false, false, false);
         this.pinInput.focus();
         break;
       case 'pukRequired':
@@ -102,8 +105,14 @@ var SimPinDialog = {
         this.errorMsgBody.textContent = _('enterPukMsg') || '';
         this.errorMsgBody.dataset.l10nId = 'enterPukMsg';
         this.errorMsg.hidden = false;
-        this.inputFieldControl(false, true, true);
+        this.inputFieldControl(false, true, false, true);
         this.pukInput.focus();
+        break;
+      case 'networkLocked':
+        this.lockType = 'nck';
+        this.errorMsg.hidden = true;
+        this.inputFieldControl(false, false, true, false);
+        this.nckInput.focus();
         break;
       default:
         this.skip();
@@ -120,10 +129,13 @@ var SimPinDialog = {
       this.skip();
       return;
     }
-    if (evt.lockType === 'pin')
+    if (evt.lockType === 'pin') {
       this.pinInput.focus();
-    else
+    } else if (evt.lockType === 'puk') {
       this.pukInput.focus();
+    } else {
+      this.nckInput.focus();
+    }
   },
 
   showErrorMsg: function spl_showErrorMsg(retry, type) {
@@ -176,6 +188,16 @@ var SimPinDialog = {
     this.clear();
   },
 
+  unlockNck: function spl_unlockNck() {
+    var nck = this.nckInput.value;
+    if (nck === '')
+      return;
+
+    var options = {lockType: 'nck', pin: nck };
+    this.unlockCardLock(options);
+    this.clear();
+  },
+
   unlockCardLock: function spl_unlockCardLock(options) {
     var req = this.mobileConnection.unlockCardLock(options);
     req.onsuccess = this.close.bind(this, 'success');
@@ -217,9 +239,10 @@ var SimPinDialog = {
     var req = this.mobileConnection.setCardLock(options);
     req.onsuccess = this.close.bind(this, 'success');
   },
-  inputFieldControl: function spl_inputField(isPin,  isPuk, isNewPin) {
+  inputFieldControl: function spl_inputField(isPin, isPuk, isNck, isNewPin) {
     this.pinArea.hidden = !isPin;
     this.pukArea.hidden = !isPuk;
+    this.nckArea.hidden = !isNck;
     this.newPinArea.hidden = !isNewPin;
     this.confirmPinArea.hidden = !isNewPin;
   },
@@ -229,8 +252,10 @@ var SimPinDialog = {
       case 'unlock':
         if (this.lockType === 'pin')
           this.unlockPin();
-        else {
+        else if (this.lockType === 'puk') {
           this.unlockPuk();
+        } else {
+          this.unlockNck();
         }
         break;
       case 'enable':
@@ -280,12 +305,12 @@ var SimPinDialog = {
         this.handleCardState();
         break;
       case 'enable':
-        this.inputFieldControl(true, false, false);
+        this.inputFieldControl(true, false, false, false);
         this.dialogTitle.textContent = _('pinTitle') || '';
         this.dialogTitle.dataset.l10nId = 'pinTitle';
         break;
       case 'changePin':
-        this.inputFieldControl(true, false, true);
+        this.inputFieldControl(true, false, false, true);
         this.dialogTitle.textContent = _('newpinTitle') || '';
         this.dialogTitle.dataset.l10nId = 'newpinTitle';
         break;
@@ -318,9 +343,9 @@ var SimPinDialog = {
 
     this.dialogDone.onclick = this.verify.bind(this);
     this.dialogClose.onclick = this.skip.bind(this);
-
     this.pinInput = this.getNumberPasswordInputField('simpin');
     this.pukInput = this.getNumberPasswordInputField('simpuk');
+    this.nckInput = this.getNumberPasswordInputField('nckpin');
     this.newPinInput = this.getNumberPasswordInputField('newSimpin');
     this.confirmPinInput = this.getNumberPasswordInputField('confirmNewSimpin');
   }

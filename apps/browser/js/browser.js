@@ -25,7 +25,7 @@ var Browser = {
   AWESOME_SCREEN: 'awesome-screen',
   SETTINGS_SCREEN: 'settings-screen',
   previousScreen: null,
-  currentScreen: this.PAGE_SCREEN,
+  currentScreen: 'page-screen',
 
   DEFAULT_SEARCH_PROVIDER_URL: 'm.bing.com',
   DEFAULT_SEARCH_PROVIDER_TITLE: 'Bing',
@@ -180,7 +180,7 @@ var Browser = {
     console.log('Populating default data.');
     // Fetch default data
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/default_data/init.json', true);
+    xhr.open('GET', '/js/init.json', true);
     xhr.addEventListener('load', (function browser_defaultDataListener() {
       if (!(xhr.status === 200 | xhr.status === 0))
         return;
@@ -212,7 +212,7 @@ var Browser = {
   },
 
   handleTryReloading: function browser_handleTryReloading() {
-    this.navigate(this.currentTab.url);
+    this.reviveCrashedTab(this.currentTab);
   },
 
   handleCloseTab: function browser_handleCloseTab() {
@@ -278,7 +278,9 @@ var Browser = {
           return;
         }
         // If address bar is hidden then show it
-        this.mainScreen.classList.remove('address-hidden');
+        if (this.addressBarState === this.HIDDEN) {
+          this.showAddressBar();
+        }
         tab.loading = true;
         if (isCurrentTab && this.currentScreen === this.PAGE_SCREEN) {
           this.throbber.classList.add('loading');
@@ -410,17 +412,11 @@ var Browser = {
         break;
 
       case 'mozbrowsererror':
-        if (evt.detail.type === 'fatal') {
-          // A background crash usually means killed to save memory
-          if (document.mozHidden) {
-            this.handleKilledTab(tab);
-          } else {
-            this.handleCrashedTab(tab);
-          }
-        }
+        if (evt.detail.type === 'fatal')
+          this.handleCrashedTab(tab);
         break;
 
-      case 'mozbrowserscroll':
+      case 'mozbrowserasyncscroll':
         this.handleScroll(evt);
         break;
       }
@@ -429,34 +425,42 @@ var Browser = {
 
   handleScroll: function browser_handleScroll(evt) {
     if (evt.detail.top < this.LOWER_SCROLL_THRESHOLD) {
-      if (this.addressBarState == this.VISIBLE ||
-        this.addressBarState == this.TRANSITIONING) {
+      if (this.addressBarState === this.VISIBLE ||
+          this.addressBarState === this.TRANSITIONING) {
         return;
       }
-      var addressBarVisible = (function browser_addressBarVisible() {
-        this.mainScreen.classList.remove('expanded');
-        this.addressBarState = this.VISIBLE;
-        this.mainScreen.removeEventListener('transitionend',
-          addressBarVisible);
-      }).bind(this);
-      this.mainScreen.addEventListener('transitionend', addressBarVisible);
-      this.addressBarState = this.TRANSITIONING;
-      this.mainScreen.classList.remove('address-hidden');
+      this.showAddressBar();
     } else if (evt.detail.top > this.UPPER_SCROLL_THRESHOLD) {
-      if (this.addressBarState == this.HIDDEN ||
-        this.addressBarState == this.TRANSITIONING) {
+      if (this.addressBarState === this.HIDDEN ||
+          this.addressBarState === this.TRANSITIONING) {
         return;
       }
-      var addressBarHidden = (function browser_addressBarHidden() {
-        this.addressBarState = this.HIDDEN;
-        this.mainScreen.removeEventListener('transitionend',
-          addressBarHidden);
-      }).bind(this);
-      this.mainScreen.classList.add('expanded');
-      this.addressBarState = this.TRANSITIONING;
-      this.mainScreen.addEventListener('transitionend', addressBarHidden);
-      this.mainScreen.classList.add('address-hidden');
+      this.hideAddressBar();
     }
+  },
+
+  hideAddressBar: function browser_hideAddressBar() {
+    var addressBarHidden = (function browser_addressBarHidden() {
+      this.addressBarState = this.HIDDEN;
+      this.mainScreen.removeEventListener('transitionend', addressBarHidden);
+    }).bind(this);
+    this.mainScreen.addEventListener('transitionend', addressBarHidden);
+    this.addressBarState = this.TRANSITIONING;
+    this.mainScreen.classList.add('expanded');
+    this.mainScreen.clientTop;
+    this.mainScreen.classList.add('address-hidden');
+  },
+
+  showAddressBar: function browser_showAddressBar() {
+    var addressBarVisible = (function browser_addressBarVisible() {
+      this.mainScreen.classList.remove('expanded');
+      this.addressBarState = this.VISIBLE;
+      this.mainScreen.removeEventListener('transitionend', addressBarVisible);
+    }).bind(this);
+    this.mainScreen.addEventListener('transitionend', addressBarVisible);
+    this.addressBarState = this.TRANSITIONING;
+    this.mainScreen.clientTop;
+    this.mainScreen.classList.remove('address-hidden');
   },
 
   handleUrlInputKeypress: function browser_handleUrlInputKeypress(evt) {
@@ -483,37 +487,33 @@ var Browser = {
   },
 
   handleCrashedTab: function browser_handleCrashedTab(tab) {
-    if (tab.id === this.currentTab.id) {
+    // No need to show the crash screen for background tabs,
+    // they will be revived when selected
+    if (tab.id === this.currentTab.id && !document.mozHidden) {
       this.showCrashScreen();
     }
-
     tab.loading = false;
     tab.crashed = true;
+    ModalDialog.clear(tab.id);
+    AuthenticationDialog.clear(tab.id);
     this.frames.removeChild(tab.dom);
     delete tab.dom;
     delete tab.screenshot;
     tab.loading = false;
-    this.createTab(null, null, tab);
-    this.refreshButtons();
-  },
-
-  handleKilledTab: function browser_handleKilledTab(tab) {
-    tab.killed = true;
-    this.frames.removeChild(tab.dom);
-    delete tab.dom;
-    tab.loading = false;
   },
 
   handleVisibilityChange: function browser_handleVisibilityChange() {
-    if (!document.mozHidden && this.currentTab.killed)
-      this.reviveKilledTab(this.currentTab);
+    if (!document.mozHidden && this.currentTab.crashed)
+      this.reviveCrashedTab(this.currentTab);
   },
 
-  reviveKilledTab: function browser_reviveKilledTab(tab) {
+  reviveCrashedTab: function browser_reviveCrashedTab(tab) {
     this.createTab(null, null, tab);
+    this.setTabVisibility(tab, true);
     this.refreshButtons();
     this.navigate(tab.url);
-    tab.killed = false;
+    tab.crashed = false;
+    this.hideCrashScreen();
   },
 
   handleWindowOpen: function browser_handleWindowOpen(evt) {
@@ -552,10 +552,6 @@ var Browser = {
   },
 
   navigate: function browser_navigate(url) {
-    if (this.currentTab.crashed) {
-      this.currentTab.crashed = false;
-      this.hideCrashScreen();
-    }
     this.hideStartscreen();
     this.showPageScreen();
     this.currentTab.title = null;
@@ -591,30 +587,40 @@ var Browser = {
       e.preventDefault();
     }
 
-    if (this.currentTab.crashed && this.urlButtonMode == this.REFRESH) {
+    if (this.urlButtonMode == this.REFRESH && this.currentTab.crashed) {
       this.setUrlBar(this.currentTab.url);
-      this.navigate(this.currentTab.url);
+      this.reviveCrashedTab(this.currentTab);
       return;
     }
 
-    if (this.urlButtonMode == this.REFRESH) {
-      this.currentTab.dom.reload(true);
+    if (this.urlButtonMode == this.REFRESH && !this.currentTab.crashed) {
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=829616
+      // Switch the hard-reload to soft-reload since hard-reload still has
+      // some issue to be fix (bug 831153).
+      this.currentTab.dom.reload(false);
       return;
     }
 
-    if (this.urlButtonMode == this.STOP) {
+    if (this.urlButtonMode == this.STOP && !this.currentTab.crashed) {
       this.currentTab.dom.stop();
       return;
     }
 
     var url = this.getUrlFromInput(this.urlInput.value);
 
-    if (url !== this.currentTab.url && !this.currentTab.crashed) {
+    if (url !== this.currentTab.url) {
       this.setUrlBar(url);
       this.currentTab.url = url;
     }
-    this.navigate(url);
+
     this.urlInput.blur();
+
+    if (this.currentTab.crashed) {
+      this.reviveCrashedTab(this.currentTab);
+      return;
+    }
+
+    this.navigate(url);
   },
 
   goBack: function browser_goBack() {
@@ -723,7 +729,8 @@ var Browser = {
           type: 'url',
           url: this.currentTab.url,
           name: this.currentTab.title,
-          icon: place.iconUri
+          icon: place.iconUri,
+          useAsyncPanZoom: true
         }
       });
     }).bind(this));
@@ -841,20 +848,20 @@ var Browser = {
     }
   },
 
-  showTopSitesTab: function browser_showTopSitesTab(filter) {
+  showTopSitesTab: function browser_showTopSitesTab() {
     this.deselectAwesomescreenTabs();
     this.topSitesTab.classList.add('selected');
     this.topSites.classList.add('selected');
-    Places.getTopSites(20, filter, this.showTopSites.bind(this));
+    Places.getTopSites(20, null, this.showTopSites.bind(this));
   },
 
-  showTopSites: function browser_showTopSites(topSites, filter) {
+  showTopSites: function browser_showTopSites(topSites) {
     this.topSites.innerHTML = '';
     var list = document.createElement('ul');
     list.setAttribute('role', 'listbox');
     this.topSites.appendChild(list);
     topSites.forEach(function browser_processTopSite(data) {
-      this.drawAwesomescreenListItem(list, data, filter);
+      this.drawAwesomescreenListItem(list, data);
     }, this);
   },
 
@@ -959,7 +966,7 @@ var Browser = {
 
   drawHistoryHeading: function browser_drawHistoryHeading(threshold,
     timestamp) {
-    const LABELS = [
+    var LABELS = [
       'future',
       'today',
       'yesterday',
@@ -1120,6 +1127,9 @@ var Browser = {
   },
 
   setTabVisibility: function(tab, visible) {
+    if (!tab.dom)
+      return;
+
     if (ModalDialog.originHasEvent(tab.id)) {
       if (visible) {
         ModalDialog.show(tab.id);
@@ -1135,18 +1145,17 @@ var Browser = {
         AuthenticationDialog.hide();
       }
     }
+
     // We put loading tabs off screen as we want to screenshot
     // them when loaded
     if (tab.loading && !visible) {
       tab.dom.style.top = '-999px';
       return;
     }
-    if (tab.dom.setVisible) {
+
+    if (tab.dom.setVisible)
       tab.dom.setVisible(visible);
-    }
-    if (tab.crashed) {
-      this.showCrashScreen();
-    }
+
     tab.dom.style.display = visible ? 'block' : 'none';
     tab.dom.style.top = '0px';
   },
@@ -1155,7 +1164,7 @@ var Browser = {
     var browserEvents = ['loadstart', 'loadend', 'locationchange',
                          'titlechange', 'iconchange', 'contextmenu',
                          'securitychange', 'openwindow', 'close',
-                         'showmodalprompt', 'error', 'scroll',
+                         'showmodalprompt', 'error', 'asyncscroll',
                          'usernameandpasswordrequired'];
     browserEvents.forEach(function attachBrowserEvent(type) {
       iframe.addEventListener('mozbrowser' + type,
@@ -1204,8 +1213,11 @@ var Browser = {
 
   deleteTab: function browser_deleteTab(id) {
     var tabIds = Object.keys(this.tabs);
-    this.tabs[id].dom.parentNode.removeChild(this.tabs[id].dom);
+    if (this.tabs[id].dom)
+      this.tabs[id].dom.parentNode.removeChild(this.tabs[id].dom);
     delete this.tabs[id];
+    ModalDialog.clear(id);
+    AuthenticationDialog.clear(id);
     if (this.currentTab && this.currentTab.id === id) {
       // The tab to be selected when the current one is deleted
       var newTab = tabIds.indexOf(id);
@@ -1245,9 +1257,9 @@ var Browser = {
 
   selectTab: function browser_selectTab(id) {
     this.currentTab = this.tabs[id];
-    // If the tab was killed, bring it back to life
-    if (this.currentTab.killed)
-      this.reviveKilledTab(this.currentTab);
+    // If the tab crashed, bring it back to life
+    if (this.currentTab.crashed)
+      this.reviveCrashedTab(this.currentTab);
     // We may have picked a currently loading background tab
     // that was positioned off screen
     this.setUrlBar(this.currentTab.title);
@@ -1399,8 +1411,8 @@ var Browser = {
     });
     this._tabScreenObjectURLs = [];
 
-    for each(var tab in this.tabs) {
-      var li = this.generateTabLi(tab, multipleTabs);
+    for (var tab in this.tabs) {
+      var li = this.generateTabLi(this.tabs[tab], multipleTabs);
       ul.appendChild(li);
     }
 
@@ -1474,16 +1486,17 @@ var Browser = {
           this.showTopSiteThumbnails.bind(this));
 
         var self = this;
-        for each(var tab in this.tabs) {
+        var tabIds = Object.keys(this.tabs);
+        tabIds.forEach(function(tabId) {
+          var tab = self.tabs[tabId];
           if (tab.dom.purgeHistory) {
-            tab.dom.purgeHistory().onsuccess = (function(e) {
-              if (self.tabs[tabId] == self.currentTab) {
+            tab.dom.purgeHistory().onsuccess = function(e) {
+              if (tab == self.currentTab) {
                 self.refreshButtons();
               }
-            });
+            };
           }
-        }
-
+        });
       }).bind(this));
 
       this.history.innerHTML = '';

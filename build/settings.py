@@ -24,8 +24,9 @@ settings = {
  "audio.volume.tts": 15,
  "audio.volume.telephony": 5,
  "bluetooth.enabled": False,
+ "bluetooth.debugging.enabled": False,
  "camera.shutter.enabled": True,
- "debug.dev-mode": False,
+ "clear.remote-windows.data": False,
  "debug.grid.enabled": False,
  "debug.oop.disabled": False,
  "debug.fps.enabled": False,
@@ -40,7 +41,6 @@ settings = {
  "deviceinfo.platform_version": "",
  "deviceinfo.software": "",
  "deviceinfo.update_channel": "",
- "devtools.debugger.remote-enabled": False,
  "gaia.system.checkForUpdates": False,
  "geolocation.enabled": True,
  "keyboard.layouts.english": True,
@@ -55,9 +55,10 @@ settings = {
  "keyboard.layouts.japanese": False,
  "keyboard.layouts.portuguese": False,
  "keyboard.layouts.spanish": False,
- "keyboard.vibration": True,
+ "keyboard.vibration": False,
  "keyboard.clicksound": False,
- "keyboard.wordsuggestion": True,
+ "keyboard.wordsuggestion": False,
+ "keyboard.current": "en",
  "language.current": "en-US",
  "lockscreen.passcode-lock.code": "0000",
  "lockscreen.passcode-lock.timeout": 0,
@@ -66,6 +67,7 @@ settings = {
  "lockscreen.enabled": True,
  "lockscreen.locked": True,
  "lockscreen.unlock-sound.enabled": False,
+ "mail.sent-sound.enabled": True,
  "operatorvariant.mcc": 0,
  "operatorvariant.mnc": 0,
  "ril.iccInfo.mbdn":"",
@@ -76,7 +78,8 @@ settings = {
  "powersave.enabled": False,
  "powersave.threshold": 0,
  "privacy.donottrackheader.enabled": False,
- "ril.callwaiting.enabled": True,
+ "ril.callwaiting.enabled": None,
+ "ril.cf.enabled": False,
  "ril.data.enabled": False,
  "ril.data.apn": "",
  "ril.data.carrier": "",
@@ -132,7 +135,9 @@ settings = {
  "vibration.enabled": True,
  "wifi.enabled": True,
  "wifi.disabled_by_wakelock": False,
- "wifi.notification": False
+ "wifi.notification": False,
+ "icc.displayTextTimeout": 40000,
+ "icc.inputTextTimeout": 40000
 }
 
 def main():
@@ -144,7 +149,9 @@ def main():
     parser.add_option("-o", "--output", help="specify the name of the output file")
     parser.add_option("-w", "--wallpaper", help="specify the name of the wallpaper file")
     parser.add_option("-v", "--verbose", help="increase output verbosity", action="store_true")
-    parser.add_option(      "--noftu", help="bypass the ftu app")
+    parser.add_option(      "--noftu", help="bypass the ftu app", action="store_true")
+    parser.add_option(      "--locale", help="specify the default locale to use")
+    parser.add_option(      "--enable-debugger", help="enable remote debugger (and ADB for VARIANT=user builds)", action="store_true")
     (options, args) = parser.parse_args(sys.argv[1:])
 
     verbose = options.verbose
@@ -169,12 +176,15 @@ def main():
     else:
         wallpaper_filename = "build/wallpaper.jpg"
 
+    enable_debugger = (options.enable_debugger == True)
+
     if verbose:
         print "Console:", options.console
         print "Homescreen URL:", homescreen_url
         print "Ftu URL:", ftu_url
         print "Setting Filename:",settings_filename
         print "Wallpaper Filename:", wallpaper_filename
+        print "Enable Debugger:", enable_debugger
 
     # Set the default console output
     if options.console:
@@ -186,6 +196,12 @@ def main():
     # Set the ftu manifest URL
     if not options.noftu:
         settings["ftu.manifestURL"] = ftu_url
+
+    # Set the default locale
+    if options.locale:
+        settings["language.current"] = options.locale
+
+    settings["devtools.debugger.remote-enabled"] = enable_debugger;
 
     # Grab wallpaper.jpg and convert it into a base64 string
     wallpaper_file = open(wallpaper_filename, "rb")

@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 var _ = navigator.mozL10n.get;
 var TAG_OPTIONS;
@@ -21,7 +21,10 @@ var Contacts = (function() {
       saveButton,
       editContactButton,
       settings,
-      settingsButton;
+      settingsButton,
+      cancelButton,
+      addButton,
+      appTitleElement;
 
   var readyToPaint = false;
   var firstContacts = null;
@@ -33,20 +36,16 @@ var Contacts = (function() {
   var contactsDetails = contacts.Details;
   var contactsForm = contacts.Form;
 
-  var loading = document.getElementById('loading-overlay');
-
   var checkUrl = function checkUrl() {
     var hasParams = window.location.hash.split('?');
     var hash = hasParams[0];
     var sectionId = hash.substr(1, hash.length) || '';
     var cList = contacts.List;
-    var overlay = true;
     var params = hasParams.length > 1 ?
       extractParams(hasParams[1]) : -1;
 
     switch (sectionId) {
       case 'view-contact-details':
-        overlay = false;
         if (params == -1 || !('id' in params)) {
           console.log('Param missing');
           return;
@@ -64,7 +63,6 @@ var Contacts = (function() {
         break;
 
       case 'view-contact-form':
-        overlay = false;
         if (params == -1 || !('id' in params)) {
           contactsForm.render(params, goToForm);
         } else {
@@ -99,7 +97,7 @@ var Contacts = (function() {
       checkCancelableActivity();
       readyToPaint = true;
       if (firstContacts) {
-        loadList(overlay, firstContacts);
+        loadList(firstContacts);
         readyToPaint = false;
       }
     }
@@ -145,6 +143,9 @@ var Contacts = (function() {
     customTag = document.getElementById('custom-tag');
     settings = document.getElementById('view-settings');
     settingsButton = document.getElementById('settings-button');
+    cancelButton = document.getElementById('cancel_activity');
+    addButton = document.getElementById('add-contact-button');
+    appTitleElement = cancelButton.parentNode.querySelector('h1');
 
     TAG_OPTIONS = {
       'phone-type' : [
@@ -188,16 +189,16 @@ var Contacts = (function() {
   };
 
   var checkCancelableActivity = function cancelableActivity() {
-    var cancelButton = document.getElementById('cancel_activty');
-    var addButton = document.getElementById('add-contact-button');
     if (ActivityHandler.currentlyHandling) {
       cancelButton.classList.remove('hide');
       addButton.classList.add('hide');
       settingsButton.classList.add('hide');
+      appTitleElement.textContent = _('selectContact');
     } else {
       cancelButton.classList.add('hide');
       addButton.classList.remove('hide');
       settingsButton.classList.remove('hide');
+      appTitleElement.textContent = _('contacts');
     }
   };
 
@@ -247,21 +248,20 @@ var Contacts = (function() {
         break;
       default:
         // if more than one required type of data
-        var prompt1 = new ValueSelector(selectDataStr);
+        var prompt1 = new ValueSelector();
         for (var i = 0; i < dataSet.length; i++) {
           var data = dataSet[i].value,
               carrier = dataSet[i].carrier || '';
-          prompt1.addToList(data + ' ' + carrier, function(itemData) {
-            return function() {
-              prompt1.hide();
-              result[type] = itemData;
-              ActivityHandler.postPickSuccess(result);
-            }
-          }(data));
-
+          prompt1.addToList(data + ' ' + carrier, data);
         }
+
+        prompt1.onchange = function onchange(itemData) {
+          prompt1.hide();
+          result[type] = itemData;
+          ActivityHandler.postPickSuccess(result);
+        };
         prompt1.show();
-    }
+    } // switch
   };
 
   var contactListClickHandler = function originalHandler(id) {
@@ -286,8 +286,8 @@ var Contacts = (function() {
     });
   };
 
-  var loadList = function loadList(overlay, contacts) {
-    contactsList.load(contacts, overlay);
+  var loadList = function loadList(contacts) {
+    contactsList.load(contacts);
     contactsList.handleClick(contactListClickHandler);
   };
 
@@ -443,13 +443,7 @@ var Contacts = (function() {
     if (ActivityHandler.currentlyHandling) {
       ActivityHandler.postPickSuccess({ number: number });
     } else {
-      var telephony = navigator.mozTelephony;
-      if (telephony) {
-        var sanitizedNumber = number.replace(/-/g, '');
-        var call = telephony.dial(sanitizedNumber);
-      } else {
-        console.log('Telephony unavailable? : ' + e);
-      }
+      TelephonyHelper.call(number);
     }
   };
 
@@ -464,6 +458,18 @@ var Contacts = (function() {
       navigation.home();
     } else {
       handleBack();
+    }
+  };
+
+  var handleDetailsBack = function handleDetailsBack() {
+    var hasParams = window.location.hash.split('?');
+    var params = hasParams.length > 1 ?
+      extractParams(hasParams[1]) : -1;
+
+    navigation.back();
+    // post message to parent page included Contacts app.
+    if (params['back_to_previous_tab'] === '1') {
+      window.parent.postMessage({ 'type': 'contactsiframe', 'message': 'back' }, '*');
     }
   };
 
@@ -569,17 +575,6 @@ var Contacts = (function() {
     navigation.go('view-settings', 'popup');
   };
 
-  var showOverlay = function showOverlay(message) {
-    var text = message || _('loadingContacts');
-
-    loading.querySelector('[data-l10n-id="loadingContacts"]').innerHTML = text;
-    loading.classList.add('show-overlay');
-  };
-
-  var hideOverlay = function hideOverlay() {
-    loading.classList.remove('show-overlay');
-  };
-
   var stopPropagation = function stopPropagation(evt) {
     evt.preventDefault();
   };
@@ -587,7 +582,7 @@ var Contacts = (function() {
   var initEventListeners = function initEventListener() {
     // Definition of elements and handlers
     utils.listeners.add({
-      '#cancel_activty': handleCancel, // Activity (any) cancellation
+      '#cancel_activity': handleCancel, // Activity (any) cancellation
       '#cancel-edit': handleCancel, // Cancel edition
       '#save-button': contacts.Form.saveContact,
       '#add-contact-button': showAddContact,
@@ -602,7 +597,7 @@ var Contacts = (function() {
           handler: contacts.Search.enterSearchMode
         }
       ],
-      '#details-back': handleBack, // Details
+      '#details-back': handleDetailsBack, // Details
       '#edit-contact-button': showEditContact,
       '#toggle-favorite': contacts.Details.toggleFavorite,
       '#contact-form button[data-field-type]': contacts.Form.onNewFieldClicked,
@@ -615,28 +610,20 @@ var Contacts = (function() {
     contacts.Details.onLineChanged();
   };
 
-  var STATUS_TIME = 2000;
-  var statusMsg = document.querySelector('#statusMsg');
 
-  var showStatus = function(text) {
-    statusMsg.querySelector('p').textContent = text;
-    statusMsg.classList.add('visible');
-    statusMsg.addEventListener('transitionend', function tend() {
-      statusMsg.removeEventListener('transitionend', tend);
-      setTimeout(function hide() {
-        statusMsg.classList.remove('visible');
-      }, STATUS_TIME);
-    });
+  var cardStateChanged = function() {
+    contacts.Settings.cardStateChanged();
   };
+
 
   var getFirstContacts = function c_getFirstContacts() {
     var onerror = function() {
       console.error('Error getting first contacts');
-    }
+    };
     contacts.List.getAllContacts(onerror, function(contacts) {
       firstContacts = contacts;
       if (readyToPaint) {
-        loadList(true, contacts);
+        loadList(contacts);
         firstContacts = null;
       }
     });
@@ -664,17 +651,18 @@ var Contacts = (function() {
     'setCurrent': setCurrent,
     'getTags': TAG_OPTIONS,
     'onLocalized': onLocalized,
-    'showOverlay': showOverlay,
-    'hideOverlay': hideOverlay,
+    'showOverlay': utils.overlay.show,
+    'hideOverlay': utils.overlay.hide,
     'showContactDetail': contactListClickHandler,
     'updateContactDetail': updateContactDetail,
     'onLineChanged': onLineChanged,
-    'showStatus': showStatus
+    'showStatus': utils.status.show,
+    'cardStateChanged': cardStateChanged
   };
 })();
 
 window.addEventListener('localized', function initContacts(evt) {
-
+  window.removeEventListener('localized', initContacts);
   fb.init(function contacts_init() {
     Contacts.onLocalized();
 
@@ -682,6 +670,10 @@ window.addEventListener('localized', function initContacts(evt) {
 
     window.addEventListener('online', Contacts.onLineChanged);
     window.addEventListener('offline', Contacts.onLineChanged);
+
+    // To listen to card state changes is needed for enabling import from SIM
+    var mobileConn = navigator.mozMobileConnection;
+    mobileConn.oncardstatechange = Contacts.cardStateChanged;
 
     if (window.navigator.mozSetMessageHandler && window.self == window.top) {
       var actHandler = ActivityHandler.handle.bind(ActivityHandler);

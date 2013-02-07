@@ -1,12 +1,13 @@
-#header {
+#evmeContainer #header {
     position: relative;
     z-index: 50;
     min-height: 80px;
 }
-#evmeContainer:not(.empty-query) #header, #evmeContainer.keyboard-visible #header {
+#evmeContainer:not(.empty-query) #header,
+#evmeContainer.keyboard-visible #header {
     background: rgba(0, 0, 0, .3);
 }
-#search-header {
+#evmeContainer #search-header {
     position: absolute;
     top: 0;
     left: 6px;
@@ -15,7 +16,7 @@
     z-index: 51;
     padding-top: 9px;
 }
-    #search-rapper {
+    #evmeContainer #search-rapper {
         position: absolute;
         top: 9px;
         left: 0;
@@ -25,29 +26,24 @@
         height: 28px;
         line-height: 30px;
     }
-    .empty-query:not(.keyboard-visible) #search-rapper {
+    #evmeContainer.empty-query:not(.keyboard-visible) #search-rapper {
         -moz-transform: translate3d(0, 23px, 0);
         height: 36px;
         line-height: 36px;
         left: 5px;
         right: 5px;
     }
-    .empty-query:not(.keyboard-visible) #search-q {
+    #evmeContainer.empty-query:not(.keyboard-visible) #search-q {
         height: 36px;
         line-height: 36px;
     }
-    .empty-query:not(.keyboard-visible) #search-q-bg {
+    #evmeContainer.empty-query:not(.keyboard-visible) #search-q-bg {
         background-position: 98% 10px;
     }
     
-    .clear-visible #search-rapper {
-        right: 60px;
-    }
-    .keyboard-visible .clear-visible #search-rapper {
-        right: 0;
-    }
-    
-    #search-q, #search-q-bg, #search-selection {
+    #evmeContainer #search-q,
+    #evmeContainer #search-q-bg,
+    #evmeContainer #search-selection {
         position: relative;
         font-size: 15px;
         vertical-align: middle;
@@ -56,14 +52,14 @@
         height: 100%;
         -moz-box-sizing: border-box;
     }
-    #search-header fieldset {
+    #evmeContainer #search-header fieldset {
         height: 100%;
         line-height: inherit;
         background: none;
 		border-radius: 0;
 		border: none;
     }
-    #search-q {
+    #evmeContainer #search-q {
         border: none;
         z-index: 10;
         padding: 2px 18px 4px 0;
@@ -73,7 +69,7 @@
         display: inline;
         background: transparent;
     }
-    #search-q-bg {
+    #evmeContainer #search-q-bg {
         border-radius: 2px;
         box-shadow: 1px 1px 0 0 #ccc inset, 0 0 0 1px rgba(0, 0, 0, .3);
         background: #fff;
@@ -85,56 +81,40 @@
         background-repeat: no-repeat;
         background-position: 98% 7px;
     }
-    .keyboard-visible .clear-visible #search-q-bg {
+    #evmeContainer .clear-visible #search-q-bg {
         background-image: none;
     }
-    #search-q:focus {
+    #evmeContainer #search-q:focus {
         outline: none;
     }
         
-    #button-clear {
+    #evmeContainer #button-clear {
         position: absolute;
-        top: 9px;
-        right: 0;
+        top: 14px;
+        right: 4px;
         z-index: 30;
-        width: 52px;
-        height: 28px;
-        line-height: 26px;
-        text-align: center;
+        width: 20px;
+        height: 20px;
         cursor: pointer;
-        color: #666;
-        font-size: 14px;
-        border-radius: 2px;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, .3);
-        font-weight: 600;
-        background: #1ac6ea;
-        background: -moz-linear-gradient(center top, #1ac6ea 0%, #12a8e0 100%);
+        font-size: 0;
+        background-position: -38px -78px;
         -moz-user-select: none;
         overflow: hidden;
         display: none;
     }
-    .clear-visible #button-clear {
+    #evmeContainer .clear-visible #button-clear {
         display: block;
     }
-    .keyboard-visible .clear-visible #button-clear {
-        width: 20px;
-        height: 20px;
-        top: 14px;
-        right: 4px;
-        background-position: -38px -78px;
-        display: block;
-        font-size: 0;
-    }
-    .keyboard-visible .clear-visible #button-clear:before {
-        content: "";
-        position: absolute;
-        top: -5px;
-        right: -5px;
-        left: -5px;
-        bottom: -5px;
-    }
+        #evmeContainer .clear-visible #button-clear:before {
+            content: "";
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            left: -8px;
+            bottom: -8px;
+        }
     
-    #default-text {
+    #evmeContainer #default-text {
         position: absolute;
         top: 0;
         bottom: 0;
@@ -143,11 +123,11 @@
         text-transform: none;
         display: none;
     }
-    .empty-query #default-text {
+    #evmeContainer.empty-query #default-text {
         display: block;
     }
     
-#homepage-search-text {
+#evmeContainer #homepage-search-text {
     position: absolute;
     top: 88px;
     left: 16px;
@@ -161,7 +141,7 @@
     -moz-transition: all .2s linear;
     transition: all .2s linear;
 }
-#homepage-search-text:before {
+#evmeContainer #homepage-search-text:before {
     content: "";
     position: absolute;
     top: -20px;
@@ -170,11 +150,11 @@
     bottom: -20px;
 }
 
-.screen-homepage #homepage-search-text {
+#evmeContainer.screen-homepage #homepage-search-text {
     display: block;
 }
 
-.loading-app #search-header  {
+#evmeContainer.loading-app #search-header  {
     -moz-transition: all .2s linear;
     transition: all .2s linear;
     opacity: 0 !important;

@@ -8,7 +8,7 @@ Evme.Utils = new function Evme_Utils() {
         CONTAINER_ID = "evmeContainer",
         COOKIE_NAME_CREDENTIALS = "credentials",
         
-        FFOSMessages = this.FFOSMessages = {
+        OSMessages = this.OSMessages = {
             "APP_CLICK": "open-in-app",
             "APP_INSTALL": "add-bookmark",
             "IS_APP_INSTALLED": "is-app-installed",
@@ -22,6 +22,8 @@ Evme.Utils = new function Evme_Utils() {
         };
     
     this.isKeyboardVisible = false;
+
+    this.EMPTY_IMAGE = "../../images/empty.gif";
     
     this.ICONS_FORMATS = {
         "Small": 10,
@@ -38,37 +40,87 @@ Evme.Utils = new function Evme_Utils() {
     };
     
     this.log = function log(message) {
-        dump("(" + (new Date().getTime()) + ") DOAT: " + message);
+        var t = new Date(),
+            h = t.getHours(),
+            m = t.getMinutes(),
+            s = t.getSeconds(),
+            ms = t.getMilliseconds();
+        
+        h < 10 && (h = '0' + h);
+        m < 10 && (m = '0' + m);
+        s < 10 && (s = '0' + s);
+        ms < 10 && (ms = '00' + ms) ||
+        ms < 100 && (ms = '0' + ms);
+        
+        dump("[" + [h, m, s, ms].join(':') + " EVME]: " + message);
     };
     
-    this.sendToFFOS = function sendToFFOS(type, data) {
+    this.l10n = function l10n(module, key, args) {
+        return navigator.mozL10n.get(Evme.Utils.l10nKey(module, key), args);
+    };
+    this.l10nAttr = function l10nAttr(module, key, args) {
+        var attr = 'data-l10n-id="' + Evme.Utils.l10nKey(module, key) + '"';
+        
+        if (args) {
+            try {
+                attr += ' data-l10n-args="' + JSON.stringify(args).replace(/"/g, '&quot;') + '"';
+            } catch(ex) {
+                
+            }
+        }
+        
+        return attr;
+    };
+    this.l10nKey = function l10nKey(module, key) {
+        return ('evme-' + module + '-' + key).toLowerCase();
+    };
+    this.l10nParseConfig = function l10nParseConfig(text) {
+        if (typeof text === "string") {
+            return text;
+        }
+        
+        var firstLanguage = Object.keys(text)[0],
+            currentLang = navigator.mozL10n.language.code || firstLanguage,
+            translation = text[currentLang] || text[firstLanguage] || '';
+        
+        return translation;
+    };
+    
+    this.shortcutIdToKey = function l10nShortcutKey(experienceId) {
+        var map = Evme.__config.shortcutIdsToL10nKeys || {};
+        return map[experienceId.toString()] || experienceId;
+    };
+    
+    this.uuid = function generateUUID() {
+        return Evme.uuid();
+    };
+    
+    this.sendToOS = function sendToOS(type, data) {
         switch (type) {
-            case FFOSMessages.APP_CLICK:
+            case OSMessages.APP_CLICK:
                 EvmeManager.openApp(data);
                 break;
-            case FFOSMessages.APP_INSTALL:
+            case OSMessages.APP_INSTALL:
                 EvmeManager.addBookmark(data);
                 break;
-            case FFOSMessages.IS_APP_INSTALLED:
+            case OSMessages.IS_APP_INSTALLED:
                 return EvmeManager.isAppInstalled(data.url);
-            case FFOSMessages.OPEN_URL:
+            case OSMessages.OPEN_URL:
                 return EvmeManager.openUrl(data.url);
-            case FFOSMessages.SHOW_MENU:
+            case OSMessages.SHOW_MENU:
                 return EvmeManager.menuShow();
-            case FFOSMessages.HIDE_MENU:
+            case OSMessages.HIDE_MENU:
                 return EvmeManager.menuHide();
-            case FFOSMessages.MENU_HEIGHT:
+            case OSMessages.MENU_HEIGHT:
                 return EvmeManager.getMenuHeight();
-            case FFOSMessages.GET_ALL_APPS:
+            case OSMessages.GET_ALL_APPS:
                 return EvmeManager.getApps();
-            case FFOSMessages.GET_APP_ICON:
+            case OSMessages.GET_APP_ICON:
                 return EvmeManager.getAppIcon(data);
-            case FFOSMessages.GET_APP_NAME:
+            case OSMessages.GET_APP_NAME:
                 return EvmeManager.getAppName(data);
-                break;
-            case FFOSMessages.GET_ICON_SIZE:
+            case OSMessages.GET_ICON_SIZE:
                 return EvmeManager.getIconSize();
-                break;
         }
     };
 
@@ -83,9 +135,45 @@ Evme.Utils = new function Evme_Utils() {
     this.cloneObject = function cloneObject(obj) {
         return JSON.parse(JSON.stringify(obj));
     };
+    
+    // remove installed apps from clouds apps
+    this.dedupInstalledApps = function dedupInstalledApps(apps, installedApps) {
+      var dedupCloudAppsBy = [];
+      
+      // first construct the data to filter by (an array of objects)
+      // currently only the URL is relevant
+      for (var i=0, appData; appData=installedApps[i++];) {
+        dedupCloudAppsBy.push({
+          'favUrl': appData.favUrl,
+          'appUrl': appData.favUrl
+        });
+      }
+      
+      return self.dedup(apps, dedupCloudAppsBy);
+    };
+    
+    // remove from arrayOrigin according to rulesToRemove
+    // both arguments are arrays of objects
+    this.dedup = function dedup(arrayOrigin, rulesToRemove) {
+      for (var i=0,item; item=arrayOrigin[i++];) {
+        for (var j=0,rule; rule=rulesToRemove[j++];) {
+          for (var property in rule) {
+            // if one of the conditions was met,
+            // remove the item and continue to next item
+            if (item[property] === rule[property]) {
+              arrayOrigin.splice(i-1, 1);
+              j = rulesToRemove.length;
+              break;
+            }
+          }
+        }
+      }
+      
+      return arrayOrigin;
+    };
 
     this.getRoundIcon = function getRoundIcon(imageSrc, callback) {
-        var size = Evme.Utils.sendToFFOS(Evme.Utils.FFOSMessages.GET_ICON_SIZE) - 2,
+        var size = self.sendToOS(self.OSMessages.GET_ICON_SIZE) - 2,
             radius = size/2,
             img = new Image();
         
@@ -114,21 +202,12 @@ Evme.Utils = new function Evme_Utils() {
         return newUser;
     };
     
-    this.updateObject = function updateObject(configData, groupConfig) {
-        if (!groupConfig) {
-            return;
-        }
-
-        for (var key in groupConfig) {
-            eval('configData["' + key.replace(/=>/g, '"]["') + '"] = groupConfig[key]');
-        }
-
-        return configData;
-    };
-
     this.formatImageData = function formatImageData(image) {
         if (!image || typeof image !== "object") {
             return image;
+        }
+        if (self.isBlob(image)) {
+            return self.EMPTY_IMAGE;
         }
         if (!image.MIMEType || image.data.length < 10) {
             return null;
@@ -138,12 +217,33 @@ Evme.Utils = new function Evme_Utils() {
     };
 
     this.getIconGroup = function getIconGroup() {
-        return Evme.Utils.cloneObject(Evme.__config.iconsGroupSettings);
-    }
+        return self.cloneObject(Evme.__config.iconsGroupSettings);
+    };
 
     this.getIconsFormat = function getIconsFormat() {
         return iconsFormat || _getIconsFormat();
     };
+
+    this.isBlob = function isBlob(arg) {
+        return arg instanceof Blob;
+    };
+
+    this.blobToDataURI = function blobToDataURI(blob, cbSuccess, cbError) {
+        if (!self.isBlob(blob)) {
+            cbError && cbError();
+            return;
+        }
+
+        var reader = new FileReader();
+        reader.onload = function() {
+            cbSuccess(reader.result);
+        };
+        reader.onerror = function() {
+            cbError && cbError();
+        };
+
+        reader.readAsDataURL(blob);
+    }
 
     this.setKeyboardVisibility = function setKeyboardVisibility(value){
     	if (self.isKeyboardVisible === value) return;
@@ -162,7 +262,7 @@ Evme.Utils = new function Evme_Utils() {
     };
 
     this.isOnline = function isOnline(callback) {
-        Connection.online(callback);
+       Connection.online(callback);
     };
 
     this.getUrlParam = function getUrlParam(key) {
@@ -250,16 +350,16 @@ Evme.Utils = new function Evme_Utils() {
 
             var docFrag = document.createDocumentFragment();
             for (var i=0; i<apps.length; i++) {
-                var app = new Evme.App(apps[i], numAppsOffset+i, isMore, self);
-                var id = apps[i].id;
-                var icon = app.getIcon();
-
+                var appData = apps[i],
+                    app = new Evme.App(appData, numAppsOffset+i, isMore, self),
+                    id = appData.id,
+                    icon = app.getIcon();
+                
                 icon = Evme.IconManager.parse(id, icon, iconsFormat);
                 app.setIcon(icon);
                 
                 if (Evme.Utils.isKeyboardVisible && (isMore || i<Math.max(apps.length/2, 8))) {
-                    var elApp = app.draw();
-                    docFrag.appendChild(elApp);
+                    docFrag.appendChild(app.draw());
                 } else {
                     doLater.push(app);
                 }
@@ -273,9 +373,9 @@ Evme.Utils = new function Evme_Utils() {
                     iconsResult["cached"].push(icon);
                 }
 
-                appsList[id] = appsList;
+                appsList[''+id] = app;
 
-                if (apps[i].installed) {
+                if (appData.installed) {
                     hasInstalled = true;
                 }
             }
@@ -289,9 +389,8 @@ Evme.Utils = new function Evme_Utils() {
             if (doLater.length > 0) {
                 timeoutAppsToDrawLater = window.setTimeout(function onTimeout(){
                     var docFrag = document.createDocumentFragment();
-                    for (var i=0; i<doLater.length; i++) {
-                        var elApp = doLater[i].draw();
-                        docFrag.appendChild(elApp);
+                    for (var i=0,app; app=doLater[i++];) {
+                        docFrag.appendChild(app.draw());
                     }
                     elList.appendChild(docFrag);
                     

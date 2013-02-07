@@ -1,22 +1,35 @@
 var DEBUGGING = false;
-var DEBUG_PREFIX = 'CC: ';
-var debug = function(str) {
-  if (!DEBUGGING)
-    return;
 
-  if (typeof str === 'object')
-    str = JSON.stringify(str);
+var debug = (function() {
+  var SEQ_ID = 0;
+  var PROCESS_ID = Date.now();
 
-  if (window.dump) {
-    window.dump(DEBUG_PREFIX + str + '\n');
-  } else if (console && console.log) {
-    console.log(DEBUG_PREFIX + str);
-    if (arguments.length > 1)
-      console.log.apply(this, arguments);
-  }
-};
+  var DEBUG_PREFIX = 'CC';
 
-var _ = function cc_fallbackTranslation(keystring) {
-  var r = navigator.mozL10n.get.apply(this, arguments);
-  return r || (DEBUGGING ? '!!' : '') + keystring;
-};
+  return function _debug() {
+    if (!DEBUGGING) {
+      return;
+    }
+
+    var currentWindow = window;
+    var parents = [];
+    while (currentWindow !== currentWindow.parent) {
+      parents.push(currentWindow.location.pathname);
+      currentWindow = currentWindow.parent;
+    }
+    parents.push(currentWindow.location.pathname);
+    parents = parents.reverse().join('>') + ':';
+
+    var uId = PROCESS_ID;
+    var message = ['(' + uId + '-' + (SEQ_ID++) + ')', DEBUG_PREFIX, parents];
+    for (var i = 0, len = arguments.length, obj; i < len; i++) {
+      obj = arguments[i];
+      message.push(typeof obj === 'object' ? JSON.stringify(obj) : obj);
+    }
+    if (window.dump) {
+      window.dump(message.join(' '));
+    } else if (console && console.log) {
+      console.log(message.join(' '));
+    }
+  };
+}());

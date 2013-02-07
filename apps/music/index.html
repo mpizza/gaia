@@ -11,12 +11,14 @@
     <link rel="resource" type="application/l10n" href="locales/locales.ini">
     <!-- Shared code -->
     <script type="text/javascript" src="shared/js/l10n.js"></script>
+    <script type="text/javascript" defer src="shared/js/mouse_event_shim.js"></script>
     <script type="text/javascript" defer src="shared/js/mediadb.js"></script>
     <script type="text/javascript" defer src="shared/js/blobview.js"></script>
     <script type="text/javascript" defer src="shared/js/async_storage.js"></script>
     <!-- Specific code -->
     <script type="text/javascript" defer src="js/metadata.js"></script>
     <script type="text/javascript" defer src="js/utils.js"></script>
+    <script type="text/javascript" defer src="js/Player.js"></script>
     <script type="text/javascript" defer src="js/music.js"></script>
   </head>
 
@@ -24,6 +26,9 @@
     <section id="title" role="region" class="skin-dark">
       <header>
         <button id="title-back"><span class="icon icon-back"></span></button>
+        <menu type="toolbar">
+          <button id="title-player" hidden><span class="icon icon-player">player</span></button>
+        </menu>
         <h1 id="title-text" data-l10n-id="music">Music</h1>
       </header>
     </section>
@@ -75,7 +80,7 @@
           <button id="player-controls-play" class="player-controls-button is-pause"></button>
           <button id="player-controls-next" class="player-controls-button"></button>
         </div>
-        <audio id="player-audio" class="hidden" controls autoplay></audio>
+        <audio id="player-audio" class="hidden"></audio>
       </div>
     </div>
     <div id="tabs">
@@ -84,10 +89,12 @@
       <button class="tabs-button" id="tabs-artists" data-option="artist"></button>
       <button class="tabs-button" id="tabs-albums" data-option="album"></button>
     </div>
-    <!-- A thin indeterminate progress bar to indicate scanning -->
-    <!-- set class to "throb" to make it go, or hidden" to make it stop -->
-    <div id="progress" class="hidden">
-      <div id="throbber"></div>
+    <!-- display scanning progress over the titlebar -->
+    <div id="scan-progress" class="hidden">
+      <div id="scan-spinner"></div>
+      <div id="scan-count"></div>
+      <div id="scan-artist"></div>
+      <div id="scan-title"></div>
     </div>
     <!-- display messages like "Scanning", "No Songs" and "No SD Card" here -->
     <div id="overlay" class="hidden">
@@ -96,6 +103,8 @@
         <p id="overlay-text"><p>
       </div>
     </div>
+    <!-- display this at startup while we load music -->
+    <div id="spinner-overlay"><div id="spinner"></div></div>
   </body>
 </html>
 
