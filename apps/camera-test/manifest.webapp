@@ -1,0 +1,59 @@
+{
+  "name": "test-canvas",
+  "description": "Gaia test-canvas",
+  "type": "certified",
+  "launch_path": "/index.html",
+  "orientation": "portrait-primary",
+  "fullscreen": true,
+  "developer": {
+    "name": "The Gaia Team",
+    "url": "https://github.com/mozilla-b2g/gaia"
+  },
+  "permissions": {
+    "device-storage:pictures":{ "access": "readwrite" },
+    "device-storage:videos":{ "access": "readwrite" },
+    "settings":{ "access": "readonly" },
+    "camera":{},
+    "geolocation":{},
+    "audio-channel-publicnotification":{}
+  },
+  "activities": {
+    "record": {
+      "filters": {
+        "type": "photos"
+       },
+      "disposition": "window"
+    },
+    "pick": {
+      "filters": {
+        "type": ["image/jpeg"]
+       },
+      "returnValue": true,
+      "disposition": "inline",
+      "href": "/index.html#pick"
+    }
+  },
+  "locales": {
+    "ar": {
+      "name": "الكاميرا",
+      "description": " Gaiaالكاميرا"
+    },
+    "en-US": {
+      "name": "test-canvas",
+      "description": "Gaia test-canvas"
+    },
+    "fr": {
+      "name": "Photo",
+      "description": "Appareil photo Gaia"
+    },
+    "zh-TW": {
+      "name": "相機",
+      "description": "Gaia 相機"
+    }
+  },
+  "default_locale": "en-US",
+  "icons": {
+    "120": "/style/icons/Camera.png",
+    "60": "/style/icons/60/Camera.png"
+  }
+}
