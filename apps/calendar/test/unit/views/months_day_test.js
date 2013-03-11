@@ -1,13 +1,6 @@
-requireApp('calendar/test/unit/helper.js', function() {
-  requireLib('timespan.js');
-  requireLib('utils/ordered_map.js');
-  requireLib('templates/day.js');
-  requireLib('views/day_based.js');
-  requireLib('views/day_child.js');
-  requireLib('views/months_day.js');
-});
+requireLib('timespan.js');
 
-suite('views/months_day', function() {
+suiteGroup('Views.MonthsDay', function() {
   var subject,
       app,
       controller,
@@ -51,6 +44,12 @@ suite('views/months_day', function() {
 
   suite('#handleEvent', function() {
 
+/*
+// This test is currently failing and has been temporarily disabled as per
+// Bug 838993. It should be fixed and re-enabled as soon as possible as per
+// Bug 840489.
+// This test appears to make incorrect assumptions about localization details
+// (it does not fail on systems configured for US English).
     test('selectedDayChange', function() {
       var date = new Date(2012, 1, 1);
       var calledWith;
@@ -85,8 +84,15 @@ suite('views/months_day', function() {
       assert.ok(html);
       assert.include(html, date.toLocaleFormat('%A'));
     });
+*/
   });
 
+/*
+// This test is currently failing and has been temporarily disabled as per
+// Bug 838993. It should be fixed and re-enabled as soon as possible as per
+// Bug 840489.
+// This test appears to make incorrect assumptions about localization details
+// (it does not fail on systems configured for US English).
   test('#_updateHeader', function() {
     var date = new Date(2012, 4, 11);
     var el = subject.header;
@@ -113,11 +119,18 @@ suite('views/months_day', function() {
     assert.ok(el.innerHTML, 'has contents');
     assert.include(el.innerHTML, expected);
   });
+*/
 
   test('#header', function() {
     assert.ok(subject.header);
   });
 
+/*
+// This test is currently failing and has been temporarily disabled as per
+// Bug 838993. It should be fixed and re-enabled as soon as possible as per
+// Bug 840489.
+// This test appears to make incorrect assumptions about localization details
+// (it does not fail on systems configured for US English).
   test('#render', function() {
     var date = new Date();
     var span = Calendar.Calc.spanOfDay(date);
@@ -133,6 +146,7 @@ suite('views/months_day', function() {
     assert.ok(html);
     assert.include(html, date.toLocaleFormat('%A'));
   });
+*/
 
   test('#onfirstseen', function() {
     assert.equal(subject.onfirstseen, subject.render);

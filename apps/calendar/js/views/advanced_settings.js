@@ -107,22 +107,37 @@
     },
 
     render: function() {
-      var store = this.app.store('Account');
-      var items = store.cached;
-      var list = this.accountList;
+      var self = this;
+      var pending = 2;
 
-      var key;
-      var result = '';
-
-      for (key in items) {
-        if (this._displayAccount(items[key])) {
-          result += template.account.render(
-            this._formatModel(items[key])
-          );
+      function next() {
+        if (!--pending && self.onrender) {
+          self.onrender();
         }
       }
-      list.innerHTML = result;
+
+      function renderSyncFrequency(err, value) {
+        self.syncFrequency.value = String(value);
+        next();
+      }
+
+      function renderAccounts(err, accounts) {
+        self.accountList.innerHTML = '';
+
+        for (var id in accounts) {
+          self._addAccount(id, accounts[id]);
+        }
+
+        next();
+      }
+
+      var settings = this.app.store('Setting');
+      var accounts = this.app.store('Account');
+
+      settings.getValue('syncFrequency', renderSyncFrequency);
+      accounts.all(renderAccounts);
     }
+
   };
 
   AdvancedSettings.prototype.onfirstseen = AdvancedSettings.prototype.render;

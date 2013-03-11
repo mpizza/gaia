@@ -2,7 +2,7 @@
  * Card definitions/logic for the folder navigation / picker for move targets.
  **/
 
-const FOLDER_DEPTH_CLASSES = [
+var FOLDER_DEPTH_CLASSES = [
     'fld-folder-depth0',
     'fld-folder-depth1',
     'fld-folder-depth2',
@@ -234,16 +234,6 @@ FolderPickerCard.prototype = {
       this.curAccount.name;
     this.domNode.getElementsByClassName('fld-folders-header-account-label')[0]
       .textContent = str;
-
-    // Update header button icon status with title name.
-    var icon = this.accountButton.firstElementChild;
-    if (isAccount) {
-      icon.classList.remove('icon-user');
-      icon.classList.add('icon-back');
-    } else {
-      icon.classList.remove('icon-back');
-      icon.classList.add('icon-user');
-    }
 
     // Update account problem status
     if (this.curAccount.problems.length)

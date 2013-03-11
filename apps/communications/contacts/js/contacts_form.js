@@ -135,9 +135,16 @@ contacts.Form = (function() {
         checkDisableButton();
       }
     });
+
+    thumbAction.addEventListener('mousedown', function click(event) {
+      // Removing current photo
+      if (event.target.tagName == 'BUTTON')
+        saveButton.removeAttribute('disabled');
+    });
   };
 
-  var render = function cf_render(contact, callback, pFbContactData) {
+  var render = function cf_render(contact, callback, pFbContactData,
+                                  fromUpdateActivity) {
     var fbContactData = pFbContactData || [];
 
     nonEditableValues = fbContactData[1] || {};
@@ -146,17 +153,19 @@ contacts.Form = (function() {
 
     resetForm();
     (renderedContact && renderedContact.id) ?
-                        showEdit(renderedContact) : showAdd(renderedContact);
+       showEdit(renderedContact, fromUpdateActivity) : showAdd(renderedContact);
     if (callback) {
       callback();
     }
   };
 
-  var showEdit = function showEdit(contact) {
+  var showEdit = function showEdit(contact, fromUpdateActivity) {
     if (!contact || !contact.id) {
       return;
     }
     formView.classList.add('skin-organic');
+    if (!fromUpdateActivity)
+      saveButton.setAttribute('disabled', 'disabled');
     saveButton.textContent = _('update');
     currentContact = contact;
     deleteContactButton.parentNode.classList.remove('hide');
@@ -164,7 +173,7 @@ contacts.Form = (function() {
     currentContactId.value = contact.id;
     givenName.value = contact.givenName || '';
     familyName.value = contact.familyName || '';
-    company.value = contact.org || '';
+    company.value = contact.org && contact.org.length > 0 ? contact.org[0] : '';
 
     if (nonEditableValues[company.value]) {
       var nodeClass = company.parentNode.classList;
@@ -315,12 +324,10 @@ contacts.Form = (function() {
 
   var deleteContact = function deleteContact(contact) {
     var deleteSuccess = function deleteSuccess() {
-      contacts.List.remove(contact.id);
       if (contacts.Search.isInSearchMode()) {
         contacts.Search.invalidateCache();
         contacts.Search.removeContact(contact.id);
       }
-      Contacts.setCurrent({});
       Contacts.navigation.home();
     };
     var request;
@@ -438,31 +445,10 @@ contacts.Form = (function() {
 
     request.onsuccess = function onsuccess() {
       // Reloading contact, as it only allows to be updated once
-      var cList = contacts.List;
-      cList.getContactById(contact.id, function onSuccess(savedContact,
-                                        enrichedContact) {
-        var nextCurrent = enrichedContact || savedContact;
-
-        Contacts.setCurrent(savedContact);
-        myContact.id = savedContact.id;
-
-        myContact.photo = nextCurrent.photo;
-        myContact.org = nextCurrent.org;
-        myContact.category = nextCurrent.category;
-
-        cList.refresh(myContact);
-        if (ActivityHandler.currentlyHandling) {
-          ActivityHandler.postNewSuccess(savedContact);
-        } else {
-          contacts.Details.render(savedContact, TAG_OPTIONS);
-        }
-        Contacts.cancel();
-      }, function onError() {
-        console.error('Error reloading contact');
-        if (ActivityHandler.currentlyHandling) {
-          ActivityHandler.postCancel();
-        }
-      });
+      if (ActivityHandler.currentlyHandling) {
+        ActivityHandler.postNewSuccess(contact);
+      }
+      Contacts.cancel();
     };
 
     request.onerror = function onerror() {
@@ -685,7 +671,7 @@ contacts.Form = (function() {
 
     activity.onsuccess = function success() {
       addRemoveIconToPhoto();
-
+      saveButton.removeAttribute('disabled');
       // XXX
       // this.result.blob is valid now, but it won't stay valid
       // (see https://bugzilla.mozilla.org/show_bug.cgi?id=806503)

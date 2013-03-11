@@ -219,8 +219,8 @@ input.msg-search-text-tease {
 
 .msg-peep-bubble {
   display: inline-block;
-  background: -moz-linear-gradient(top, #FFFFFF, #DDDDDD);
-  border: 1px solid #CCCCCC;
+  background: #F2F2F2;
+  border: 0.5px solid #CCCCCC;
   border-radius: 1rem;
   margin: 1px 0;
   padding: 2px 0.8rem;
@@ -232,7 +232,6 @@ input.msg-search-text-tease {
 .msg-peep-content {
 }
 .msg-peep-address {
-  font-style: italic;
 }
 
 .msg-attachment-item {
@@ -450,15 +449,19 @@ input.msg-search-text-tease {
 }
 
 /* PROGRESS LABEL BUILDING BLOCKS EXTENSION */
-.msg-messages-sync-container > p[role="status"],
+.msg-messages-sync-container > p,
 .msg-list-empty {
   width: 80%;
   padding: 2rem 10%;
   text-align: center;
+  font: 500 1.3rem/1em "MozTT", Sans-serif;
 }
 .msg-list-empty {
   position: absolute;
   top: 40%;
+}
+.msg-messages-syncing > span {
+  margin: 0 1rem;
 }
 .msg-messages-sync-more {
   margin: 3rem 0;
@@ -466,7 +469,7 @@ input.msg-search-text-tease {
   border-bottom: 1px solid lightgray;
 }
 .msg-messages-sync-more > span {
-  margin: 0 !important;
+  margin: 0;
 }
 
 /* Filters selected state */

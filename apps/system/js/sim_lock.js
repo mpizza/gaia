@@ -39,7 +39,8 @@ var SimLock = {
           return;
 
         // Ignore first time usage app which already ask for SIM code
-        if (evt.target.classList.contains('ftu'))
+        // XXX: We should have a better way to detect this app is FTU or not.
+        if (evt.target.dataset.frameOrigin == FtuLauncher.getFtuOrigin())
           return;
 
         if (!('telephony' in app.manifest.permissions ||
@@ -73,9 +74,10 @@ var SimLock = {
       return false;
 
     switch (conn.cardState) {
-      // do nothing in absent and null card states
+      // do nothing in either absent, unknown or null card states
       case null:
       case 'absent':
+      case 'unknown':
         break;
       case 'pukRequired':
       case 'pinRequired':
@@ -85,13 +87,13 @@ var SimLock = {
         // XXXX: After unlocking the SIM the cardState is
         //       'networkLocked' but it changes inmediately to 'ready'
         //       if the phone is not SIM-locked. If the cardState
-        //       is still 'networkLocked' after two seconds we unlock
+        //       is still 'networkLocked' after 20 seconds we unlock
         //       the network control key lock (network personalization).
         setTimeout(function checkState() {
           if (conn.cardState == 'networkLocked') {
             SimPinDialog.show('unlock', SimLock.onClose);
           }
-        }, 5000);
+        }, 20000);
         break;
     }
     return false;

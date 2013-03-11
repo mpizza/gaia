@@ -9,6 +9,7 @@ if (typeof Contacts.extFb === 'undefined') {
 
     var extensionFrame = document.querySelector('#fb-extensions');
     var oauthFrame = document.querySelector('#fb-oauth');
+    oauthFrame.src = '/facebook/fb_oauth.html';
     var currentURI, access_token;
     var canClose = true;
     var closeRequested = false;
@@ -26,7 +27,7 @@ if (typeof Contacts.extFb === 'undefined') {
     extFb.importFB = function(evt) {
       closeRequested = false;
       canClose = false;
-      load('fb_import.html', 'friends');
+      load('import.html?service=facebook', 'friends');
     };
 
     function load(uri, from) {
@@ -34,7 +35,8 @@ if (typeof Contacts.extFb === 'undefined') {
       oauthFrame.contentWindow.postMessage({
         type: 'start',
         data: {
-          from: from
+          from: from,
+          service: 'facebook'
         }
       }, fb.CONTACTS_APP_ORIGIN);
       currentURI = uri;
@@ -181,7 +183,6 @@ if (typeof Contacts.extFb === 'undefined') {
         req.onsuccess = function success() {
           close();
 
-          contacts.List.refresh(contactId);
           if (originalFbContact && !fb.isFbLinked(originalFbContact)) {
             contacts.List.remove(originalFbContact.id);
           }
@@ -227,10 +228,8 @@ if (typeof Contacts.extFb === 'undefined') {
 
       freq.onsuccess = function() {
         Contacts.updateContactDetail(cid);
-        contacts.List.refresh(cid);
         if (freq.result) {
           Contacts.updateContactDetail(cid);
-          contacts.List.refresh(freq.result);
         }
       };
 
@@ -289,9 +288,7 @@ if (typeof Contacts.extFb === 'undefined') {
           notifySettings();
         break;
 
-        case 'fb_updated':
-          contacts.List.load();
-
+        case 'import_updated':
           Contacts.navigation.home(function fb_finished() {
             extensionFrame.contentWindow.postMessage({
               type: 'contacts_loaded',
@@ -307,8 +304,7 @@ if (typeof Contacts.extFb === 'undefined') {
             unload();
           }
           // Check whether there has been changes or not
-          if(data.data > 0) {
-            contacts.List.load();
+          if (data.data > 0) {
             notifySettings();
           }
         break;

@@ -32,10 +32,10 @@
     "embed-apps":{},
     "background-sensors":{},
     "permissions":{},
-    "audio-channel-publicnotification":{},
     "audio-channel-notification":{},
     "audio-channel-content":{},
-    "cellbroadcast":{}
+    "cellbroadcast":{},
+    "keyboard":{}
   },
   "locales": {
     "ar": {
@@ -56,6 +56,9 @@
     }
   },
   "default_locale": "en-US",
+  "icons": {
+    "30": "/style/icons/System.png"
+  },
   "messages": [
      { "alarm": "/index.html" },
      { "bluetooth-opp-transfer-complete": "/index.html" },

@@ -9,7 +9,7 @@
  * us for the non-newsletter case.  We could also internally load the CSS file
  * and splice it in rather than hardcoding it.
  */
-const DEFAULT_STYLE_TAG =
+var DEFAULT_STYLE_TAG =
   '<style type="text/css">\n' +
   // ## blockquote
   // blockquote per html5: before: 1em, after: 1em, start: 40px, end: 40px
@@ -20,6 +20,12 @@ const DEFAULT_STYLE_TAG =
   // padding-start isn't a thing yet, somehow.
   'padding: 0; -moz-padding-start: 5px; ' +
   '}\n' +
+  // Give the layout engine an upper-bound on the width that's arguably
+  // much wider than anyone should find reasonable, but might save us from
+  // super pathological cases.
+  'html, body { max-width: 1200px; }\n' +
+  // pre messes up wrapping very badly if left to its own devices
+  'pre { white-space: pre-wrap; }\n' +
   '.moz-external-link { color: blue; cursor: pointer; }\n' +
   '</style>';
 

@@ -11,6 +11,7 @@ navigator.mozL10n.ready(function wifiSettings() {
   if (!settings)
     return;
 
+  var gWifiManager = getWifiManager();
   var gWifi = document.querySelector('#wifi');
   var gWifiCheckBox = document.querySelector('#wifi-enabled input');
   var gWifiInfoBlock = document.querySelector('#wifi-desc');
@@ -179,7 +180,7 @@ navigator.mozL10n.ready(function wifiSettings() {
       var pinInput = pinItem.querySelector('input');
       pinInput.oninput = function() {
         submitWpsButton.disabled = !isValidWpsPin(pinInput.value);
-      }
+      };
 
       function onWpsMethodChange() {
         var method =
@@ -225,7 +226,7 @@ navigator.mozL10n.ready(function wifiSettings() {
     var keys = network.capabilities;
     if (keys && keys.length) {
       small.textContent = _('securedBy', { capabilities: keys.join(', ') });
-      ssid.className = 'wifi-secure';
+      ssid.classList.add('wifi-secure');
     } else {
       small.textContent = _('securityOpen');
     }
@@ -328,7 +329,7 @@ navigator.mozL10n.ready(function wifiSettings() {
 
             // signal is between 0 and 100, level should be between 0 and 4
             var level = Math.min(Math.floor(network.relSignalStrength / 20), 4);
-            listItem.className = 'wifi-signal' + level;
+            listItem.querySelector('a').classList.add('wifi-signal' + level);
 
             // put connected network on top of list
             if (isConnected(network)) {
@@ -465,7 +466,7 @@ navigator.mozL10n.ready(function wifiSettings() {
   // join hidden network
   document.getElementById('joinHidden').onclick = function joinHiddenNetwork() {
     toggleNetwork();
-  }
+  };
 
   function isConnected(network) {
     /**
@@ -610,7 +611,7 @@ navigator.mozL10n.ready(function wifiSettings() {
             ipAddress.textContent = info.ipAddress || '';
             speed.textContent =
                 _('linkSpeedMbs', { linkSpeed: info.linkSpeed });
-          }
+          };
           gWifiManager.connectionInfoUpdate = updateNetInfo;
           updateNetInfo();
 
@@ -634,7 +635,7 @@ navigator.mozL10n.ready(function wifiSettings() {
             network.capabilities = [key];
             dialog.dataset.security = key;
             checkPassword();
-          }
+          };
           security.onchange = onSecurityChange;
           onSecurityChange();
           break;

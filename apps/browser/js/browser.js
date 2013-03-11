@@ -1,5 +1,6 @@
 'use strict';
 
+var rscheme = /^(?:[a-z\u00a1-\uffff0-9-+]+)(?::|:\/\/)/i;
 var _ = navigator.mozL10n.get;
 
 var Browser = {
@@ -39,6 +40,8 @@ var Browser = {
   MAX_THUMBNAIL_WIDTH: 140,
   MAX_THUMBNAIL_HEIGHT: 100,
   FIRST_TAB: 'tab_0',
+  MAX_SAVING_RETRIES: 100, // max number of retries when saving images with a
+                           // new name.
 
   urlButtonMode: null,
   addressBarState: null,
@@ -52,8 +55,6 @@ var Browser = {
     this.getAllElements();
 
     // Add event listeners
-    window.addEventListener('resize', this.handleWindowResize.bind(this));
-
     this.backButton.addEventListener('click', this.goBack.bind(this));
     this.forwardButton.addEventListener('click', this.goForward.bind(this));
     this.bookmarkButton.addEventListener('click',
@@ -126,7 +127,6 @@ var Browser = {
     document.addEventListener('mozvisibilitychange',
       this.handleVisibilityChange.bind(this));
 
-    this.handleWindowResize();
 
     ModalDialog.init();
     AuthenticationDialog.init(false);
@@ -224,20 +224,6 @@ var Browser = {
     this.updateTabsCount();
   },
 
-  // We want to ensure the current page preview on the tabs screen is in
-  // a consistently sized gutter on the left
-  handleWindowResize: function browser_handleWindowResize() {
-    var leftPos = 'translate(' + -(window.innerWidth - 50) + 'px)';
-    if (!this.gutterPosRule) {
-      var css = '.tabs-screen #main-screen { transform: ' + leftPos + '; }';
-      var insertId = this.styleSheet.cssRules.length - 1;
-      this.gutterPosRule = this.styleSheet.insertRule(css, insertId);
-    } else {
-      var rule = this.styleSheet.cssRules[this.gutterPosRule];
-      rule.style.transform = leftPos;
-    }
-  },
-
   // Tabs badge is the button at the top right, used to show the number of tabs
   // and to create new ones
   handleTabsBadgeClicked: function browser_handleTabsBadgeClicked(e) {
@@ -301,15 +287,11 @@ var Browser = {
           this.setUrlButtonMode(this.REFRESH);
         }
 
-        // We capture screenshots for everything when loading is
-        // completed, but set background tabs inactive
+        // Capture screenshot for tab thumbnail
         if (tab.dom.getScreenshot) {
           tab.dom.getScreenshot(this.MAX_THUMBNAIL_WIDTH,
             this.MAX_THUMBNAIL_HEIGHT).onsuccess = (function(e) {
             tab.screenshot = e.target.result;
-            if (!isCurrentTab) {
-              this.setTabVisibility(tab, false);
-            }
             if (this.currentScreen === this.TABS_SCREEN) {
               this.showTabScreen();
             }
@@ -465,11 +447,11 @@ var Browser = {
 
   handleUrlInputKeypress: function browser_handleUrlInputKeypress(evt) {
     var input = this.urlInput.value;
-    if (this.isSearch(input)) {
-      this.setUrlButtonMode(this.SEARCH);
-    } else {
-      this.setUrlButtonMode(this.GO);
-    }
+
+    this.setUrlButtonMode(
+      this.isNotURL(input) ? this.SEARCH : this.GO
+    );
+
     this.updateAwesomeScreen(input);
   },
 
@@ -560,26 +542,21 @@ var Browser = {
     this.setUrlBar(url);
   },
 
-  isSearch: function browser_isSearch(url) {
-    url = url.trim();
-    // If the address entered starts with a quote then search, if it
-    // contains a . or : then treat as a url, else search
-    return /^"|\'/.test(url) || !(/\.|\:/.test(url)); //"
-  },
+  getUrlFromInput: function browser_getUrlFromInput(input) {
+    var hasScheme = !!(rscheme.exec(input) || [])[0];
 
-  getUrlFromInput: function browser_getUrlFromInput(url) {
-    url = url.trim();
-    var isSearch = this.isSearch(url);
-    var protocolRegexp = /^([a-z]+:)(\/\/)?/i;
-    var protocol = protocolRegexp.exec(url);
+    // No protocol, could be a search term
+    if (this.isNotURL(input)) {
+      return 'http://' + this.DEFAULT_SEARCH_PROVIDER_URL +
+        '/search?q=' + input;
+    }
 
-    if (isSearch) {
-      return 'http://' + this.DEFAULT_SEARCH_PROVIDER_URL + '/search?q=' + url;
+    // No scheme, prepend basic protocol and return
+    if (!hasScheme) {
+      return 'http://' + input;
     }
-    if (!protocol) {
-      return 'http://' + url;
-    }
-    return url;
+
+    return input;
   },
 
   handleUrlFormSubmit: function browser_handleUrlFormSubmit(e) {
@@ -1020,6 +997,66 @@ var Browser = {
     this.updateTabsCount();
   },
 
+  // Saves an image to device storage.
+  saveImage: function browser_saveImage(url) {
+    function displayMessage(message) {
+      var status = document.getElementById('save-image-status');
+      status.firstElementChild.textContent = message;
+      status.classList.add('visible');
+      window.setTimeout(function() {
+        status.classList.remove('visible');
+      }, 3000);
+    }
+
+    function storeBlob(blob, name, retryCount) {
+      var pictureStorage = navigator.getDeviceStorage('pictures');
+      var addreq = pictureStorage.addNamed(blob, name);
+      addreq.onsuccess = function() {
+        displayMessage(_('image-saved'));
+      };
+      addreq.onerror = function() {
+        // Prepend some always changing id and try to store again, but give up
+        // after MAX_SAVING_RETRIES retries.
+        if (addreq.error.name === 'NoModificationAllowedError' &&
+            retryCount !== Browser.MAX_SAVING_RETRIES) {
+          name = Date.now() + '-' + name;
+          storeBlob(blob, name, retryCount + 1);
+        } else {
+          displayMessage(_('error-saving-image'));
+        }
+      };
+    }
+
+    var xhr = new XMLHttpRequest({mozSystem: true});
+    xhr.open('GET', url, true);
+    xhr.responseType = 'blob';
+    xhr.onload = function browser_imageDataListener() {
+      if (xhr.status !== 200 || !xhr.response) {
+        displayMessage(_('error-saving-image'));
+        return;
+      }
+
+      // Save the blob to device storage.
+      // Extract a filename from the URL, and to some sanitizing.
+      var name = url.split('/').reverse()[0].toLowerCase()
+                    .replace(/[^a-z0-9\.]/g, '_');
+
+      // If we have no file extension, use the content-type header to
+      // add one.
+      if (name.split('.').length == 1) {
+        var contentType = xhr.getResponseHeader('content-type');
+        name += '.' + contentType.split('/')[1];
+      }
+
+      storeBlob(xhr.response, name, 0);
+    };
+
+    xhr.onerror = function getDefaultDataError() {
+      displayMessage(_('error-saving-image'));
+    };
+    xhr.send();
+  },
+
   // This generates callbacks for context menu targets that have
   // default actions attached
   generateSystemMenuItem: function browser_generateSystemMenuItem(item) {
@@ -1029,6 +1066,13 @@ var Browser = {
         label: _('open-in-new-tab'),
         callback: function() {
           self.openInNewTab(item.data);
+        }
+      };
+    } else if (item.nodeName === 'IMG') {
+      return {
+        label: _('save-image'),
+        callback: function() {
+          self.saveImage(item.data);
         }
       };
     }
@@ -1146,18 +1190,26 @@ var Browser = {
       }
     }
 
-    // We put loading tabs off screen as we want to screenshot
-    // them when loaded
-    if (tab.loading && !visible) {
-      tab.dom.style.top = '-999px';
-      return;
-    }
-
-    if (tab.dom.setVisible)
-      tab.dom.setVisible(visible);
-
+    this.setVisibleWrapper(tab, visible);
     tab.dom.style.display = visible ? 'block' : 'none';
     tab.dom.style.top = '0px';
+  },
+
+  // dom.setVisible is loaded asynchronously from BrowserElementChildPreload
+  // and may require a yield before we call it, we want to make sure to
+  // clear any previous call
+  setVisibleWrapper: function(tab, visible) {
+    if (tab.setVisibleTimeout) {
+      clearTimeout(tab.setVisibleTimeout);
+    }
+    if (tab.dom.setVisible) {
+      tab.dom.setVisible(visible);
+      return;
+    }
+    tab.setVisibleTimeout = setTimeout(function() {
+      if (tab.dom.setVisible)
+        tab.dom.setVisible(visible);
+    });
   },
 
   bindBrowserEvents: function browser_bindBrowserEvents(iframe, tab) {
@@ -1204,8 +1256,9 @@ var Browser = {
       };
     }
 
+    // Default newly created frames to the background
+    this.setVisibleWrapper(tab, false);
     this.bindBrowserEvents(iframe, tab);
-
     this.tabs[tab.id] = tab;
     this.frames.appendChild(iframe);
     return tab.id;
@@ -1595,8 +1648,6 @@ var Browser = {
 
       this.tab.classList.add('active');
       this.tab.style.MozTransition = '';
-      this.tab.style.position = 'absolute';
-      this.tab.style.width = e.target.parentNode.clientWidth + 'px';
     },
 
     pan: function tabSwipe_pan(e) {
@@ -1694,6 +1745,8 @@ var Browser = {
     switch (activity.source.data.type) {
       case 'url':
         var url = this.getUrlFromInput(activity.source.data.url);
+        if (this.currentTab)
+          this.hideCurrentTab();
         this.selectTab(this.createTab(url));
         this.showPageScreen();
         break;
@@ -1755,4 +1808,3 @@ function actHandle(activity) {
 if (window.navigator.mozSetMessageHandler) {
   window.navigator.mozSetMessageHandler('activity', actHandle);
 }
-

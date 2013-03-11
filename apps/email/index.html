@@ -19,23 +19,27 @@
   <link rel="stylesheet" type="text/css" href="shared/style/action_menu.css">
   <!-- Unstable building blocks -->
   <link rel="stylesheet" type="text/css" href="shared/style_unstable/progress_activity.css"/>
-  <link rel="stylesheet" type="text/css" href="shared/style_unstable/tabs.css"/>  
+  <link rel="stylesheet" type="text/css" href="shared/style_unstable/tabs.css"/>
   <!-- Localization -->
   <link rel="resource" type="application/l10n" href="locales/locales.ini">
   <link rel="resource" type="application/l10n" href="shared/locales/date.ini">
   <!-- Shared code -->
-  <script type="text/javascript" src="shared/js/l10n.js"></script>
-  <script type="text/javascript" src="shared/js/l10n_date.js"></script>
-  <script type="text/javascript" src="shared/js/gesture_detector.js"></script>
+  <script type="text/javascript" defer src="shared/js/l10n.js"></script>
+  <script type="text/javascript" defer src="shared/js/l10n_date.js"></script>
+  <script type="text/javascript" defer src="shared/js/gesture_detector.js"></script>
   <!-- Specific code -->
-  <script type="text/javascript" src="js/console-hook.js"></script>
-  <script type="text/javascript" src="js/mail-common.js"></script>
-  <script type="text/javascript" src="js/message-cards.js"></script>
-  <script type="text/javascript" src="js/folder-cards.js"></script>
+  <script type="text/javascript" defer src="js/input_areas.js"></script>
+  <script type="text/javascript" defer src="js/console-hook.js"></script>
+  <script type="text/javascript" defer src="js/mail-common.js"></script>
+  <script type="text/javascript" defer src="js/message-cards.js"></script>
+  <script type="text/javascript" defer src="js/folder-cards.js"></script>
   <!-- This one is an optimized vendor library containing our mail backend. -->
-  <script type="application/javascript;version=1.8"
-          src="js/ext/gaia-email-opt.js"></script>
-  <script type="text/javascript" src="js/mail-app.js"></script>
+  <!-- START BACKEND INJECT - do not modify -->
+  <script type="application/javascript;version=1.8" defer src="js/ext/alameda.js"></script>
+  <script type="application/javascript;version=1.8" defer src="js/ext/end.js"></script>
+  <!-- END BACKEND INJECT -->
+  <script type="text/javascript" defer src="/shared/js/lazy_loader.js"></script>
+  <script type="text/javascript" defer src="js/mail-app.js"></script>
   <!-- Lazy Loaded Resources. See: App.loader.load()
   <link rel="stylesheet" type="text/css" href="style/value_selector.css>
   <link rel="stylesheet" type="text/css" href="style/compose-cards.css">
@@ -91,7 +95,7 @@
         <section class="fld-folders-header skin-organic" role="region">
           <header>
             <a href="#" class="fld-accounts-btn">
-              <span class="icon icon-user"></span>
+              <span class="icon icon-back"></span>
             </a>
             <h1 class="fld-folders-header-account-label"></h1>
           </header>
@@ -195,11 +199,11 @@
                  regardless of their displayed status so we don't scroll them
                  out of the way -->
             <div class="msg-messages-sync-container">
-              <p role="status" class="msg-messages-syncing collapsed">
+              <p class="msg-messages-syncing collapsed">
                 <progress class="small"></progress>
                 <span data-l10n-id="messages-syncing">Message loadinG</span>
               </p>
-              <p role="status" class="msg-messages-sync-more collapsed">
+              <p class="msg-messages-sync-more collapsed">
                 <span data-l10n-id="messages-sync-more">SynC MorE</span>
               </p>
             </div>
@@ -213,7 +217,7 @@
         <div class="msg-list-action-toolbar bottom-toolbar">
           <button class="msg-refresh-btn bottom-btn msg-nonsearch-only"></button>
           <button class="msg-search-btn bottom-btn msg-nonsearch-only"></button>
-          <button class="msg-edit-btn bottom-btn msg-nonsearch-only"></button>
+          <button class="msg-edit-btn bottom-btn"></button>
         </div>
         <!-- Toolbar for multi-edit state -->
         <div class="msg-listedit-action-toolbar bottom-edit-toolbar bottom-toolbar collapsed">
@@ -881,7 +885,7 @@
       </section>
 
       <!-- Developer debug page; for those in the know -->
-      <section class="card-settings-debug card">
+      <section class="card-settings-debug card skin-organic" role="region">
         <header>
           <a href="#" class="tng-close-btn">
             <span class="icon icon-close"></span>
@@ -987,6 +991,16 @@
           <button id="msg-delete-ok" class="danger" data-l10n-id="message-edit-menu-delete">OK</button>
         </menu>
       </form>
+      <form role="dialog" class="msg-browse-confirm" data-type="confirm">
+        <section>
+          <h1 data-l10n-id="confirm-dialog-title">Confirmation</h1>
+          <p></p>
+        </section>
+        <menu>
+          <button id="msg-browse-cancel" data-l10n-id="message-multiedit-cancel">CanceL</button>
+          <button id="msg-browse-ok" class="recommend" data-l10n-id="dialog-button-ok">OK</button>
+        </menu>
+      </form>
     </div>
     <!-- Widget nodes for the compose cards; styles use the cmp prefix -->
     <div id="templ-cmp">
@@ -1031,13 +1045,14 @@
         <span class="cmp-attachment-filesize"></span>
         <button class="cmp-attachment-remove">X</span>
       </li>
-      <div class="cmp-sending-container">
-        <p role="status" class="cmp-messages-sending">
-          <progress></progress>
-          <span class="cmp-sending-text" data-l10n-id="compose-sending-message">Sending messagE
-          </span>
-        </p>
-      </div>
+      <form role="dialog" data-type="confirm" class="cmp-sending-container">
+        <section class="cmp-messages-sending">
+          <h1 data-l10n-id="compose-sending-message">Sending messagE</h1>
+          <p style="text-align: center">
+            <progress></progress>
+          </p>
+        </section>
+      </form>
     </div>
     <!-- Widget nodes for the setup cards; styles use the sup prefix -->
     <div id="templ-sup">

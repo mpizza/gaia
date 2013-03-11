@@ -48,6 +48,9 @@ var dragging = false;
 var fullscreenTimer;
 var fullscreenCallback;
 
+// Videos recorded by our own camera have filenames of this form
+var FROMCAMERA = /^DCIM\/\d{3}MZLLA\/VID_\d{4}\.3gp$/;
+
 function init() {
 
   videodb = new MediaDB('videos', metaDataParser);
@@ -99,39 +102,35 @@ function videoAdded(videodata) {
 
   videoCount += 1;
 
+  var inner = document.createElement('div');
+  inner.className = 'inner';
+
   if (videodata.metadata.poster) {
-    poster = document.createElement('img');
+    poster = document.createElement('div');
+    poster.className = 'img';
     setPosterImage(poster, videodata.metadata.poster);
   }
 
-  var title = document.createElement('p');
-  title.className = 'name';
-  title.textContent = videodata.metadata.title;
-
-  var duration = document.createElement('p');
-  duration.className = 'time';
+  var details = document.createElement('div');
+  details.className = 'details';
   if (isFinite(videodata.metadata.duration)) {
     var d = Math.round(videodata.metadata.duration);
-    duration.textContent = formatDuration(d);
+    details.dataset.after = formatDuration(d);
   }
+  details.textContent = videodata.metadata.title;
 
   var thumbnail = document.createElement('li');
   if (poster) {
-    thumbnail.appendChild(poster);
+    inner.appendChild(poster);
   }
 
   if (!videodata.metadata.watched) {
     var unread = document.createElement('div');
     unread.classList.add('unwatched');
-    thumbnail.appendChild(unread);
+    inner.appendChild(unread);
   }
 
-  thumbnail.appendChild(title);
-  thumbnail.appendChild(duration);
   thumbnail.dataset.name = videodata.name;
-
-  var hr = document.createElement('hr');
-  thumbnail.appendChild(hr);
 
   thumbnail.addEventListener('click', function(e) {
     // When the user presses and holds to delete a video, we get a
@@ -145,7 +144,10 @@ function videoAdded(videodata) {
       ctxTriggered = false;
     }
   });
+  inner.appendChild(details);
+  thumbnail.appendChild(inner);
   dom.thumbnails.appendChild(thumbnail);
+  textTruncate(details);
 }
 
 dom.thumbnails.addEventListener('contextmenu', function(evt) {
@@ -163,6 +165,17 @@ dom.thumbnails.addEventListener('contextmenu', function(evt) {
 function deleteFile(file) {
   var msg = navigator.mozL10n.get('confirm-delete');
   if (confirm(msg + ' ' + file)) {
+    if (FROMCAMERA.test(file)) {
+      // If we're deleting a video file recorded by our camera,
+      // we also need to delete the poster image associated with
+      // that video.
+      var postername = file.replace('.3gp', '.jpg');
+      navigator.getDeviceStorage('pictures'). delete(postername);
+    }
+
+    // Whether or not there was a poster file to delete, delete the
+    // actual video file. This will cause the MediaDB to send a 'deleted'
+    // event, and the handler for that event will call videoDeleted() below.
     videodb.deleteFile(file);
   }
 }
@@ -197,7 +210,26 @@ function updateDialog() {
   }
 }
 
-function metaDataParser(videofile, callback, metadataError) {
+function metaDataParser(videofile, callback, metadataError, delayed) {
+  // XXX
+  // When the camera records a video, it saves the video file and then
+  // uses a <video> tag to create a poster image for that video.
+  // But if the Video app is running, we get an event from device storage
+  // and start parsing the metadata when the video file is created. So now
+  // the Camera app and the Video app are both trying to use the video
+  // decoding hardware at the same time. The camera app really has to
+  // succeed. We should modify this app to wait for and use the poster image
+  // the way that the Gallery app does. For now, however, we avoid the problem
+  // by just waiting to give the Camera app time to save the poster image.
+  // In the worst case, we could fail to parse the metadata here. But that
+  // is better than having the camera fail to record the video correctly.
+  //
+  if (!delayed && FROMCAMERA.test(videofile.name)) {
+    setTimeout(function() {
+      metaDataParser(videofile, callback, metadataError, true);
+    }, 2000);
+    return;
+  }
 
   var previewPlayer = document.createElement('video');
   var completed = false;
@@ -220,6 +252,8 @@ function metaDataParser(videofile, callback, metadataError) {
     if (!completed) {
       metadataError(metadata.title);
     }
+    previewPlayer.removeAttribute('src');
+    previewPlayer.load();
   };
   previewPlayer.onloadedmetadata = function() {
 
@@ -324,10 +358,11 @@ function getThumbnailDom(filename) {
 }
 
 function setPosterImage(dom, poster) {
-  dom.src = URL.createObjectURL(poster);
-  dom.onload = function() {
-    URL.revokeObjectURL(dom.src);
-  };
+  if (dom.dataset.uri) {
+    URL.revokeObjectURL(dom.dataset.uri);
+  }
+  dom.dataset.uri = URL.createObjectURL(poster);
+  dom.style.backgroundImage = 'url(' + dom.dataset.uri + ')';
 }
 
 function showOverlay(id) {
@@ -496,7 +531,7 @@ function showPlayer(data, autoPlay) {
     playerShowing = true;
     setPlayerSize();
 
-    if ('name' in currentVideo && /^DCIM/.test(currentVideo.name)) {
+    if ('name' in currentVideo && FROMCAMERA.test(currentVideo.name)) {
       dom.deleteVideoButton.classList.remove('hidden');
     }
 
@@ -533,6 +568,14 @@ function hidePlayer() {
     dom.thumbnails.classList.remove('hidden');
     playerShowing = false;
     updateDialog();
+
+    // Unload the video. This releases the video decoding hardware
+    // so other apps can use it. Note that any time the video app is hidden
+    // (by switching to another app) we leave fullscreen mode, and this
+    // code gets triggered, so if the video app is not visible it should
+    // not be holding on to the video hardware
+    dom.player.removeAttribute('src');
+    dom.player.load();
   }
 
   if (!('metadata' in currentVideo)) {
@@ -555,14 +598,14 @@ function hidePlayer() {
       screenLock = null;
     }
 
-    if (poster) {
-      var posterImg = li.querySelectorAll('img')[0];
+    var posterImg = li.querySelector('.img');
+    if (poster && posterImg) {
       setPosterImage(posterImg, poster);
     }
 
-    var unwatched = li.querySelectorAll('div.unwatched');
-    if (unwatched.length) {
-      li.removeChild(unwatched[0]);
+    var unwatched = li.querySelector('.unwatched');
+    if (unwatched) {
+      unwatched.parentNode.removeChild(unwatched);
     }
 
     videodb.updateMetadata(video.name, video.metadata, completeHidingPlayer);
@@ -725,11 +768,123 @@ function padLeft(num, length) {
 
 function formatDuration(duration) {
   var minutes = Math.floor(duration / 60);
-  var seconds = Math.round(duration % 60);
+  var seconds = Math.floor(duration % 60);
   if (minutes < 60) {
     return padLeft(minutes, 2) + ':' + padLeft(seconds, 2);
   }
-  return '';
+  var hours = Math.floor(minutes / 60);
+  minutes = Math.floor(minutes % 60);
+  return hours + ':' + padLeft(minutes, 2) + ':' + padLeft(seconds, 2);
+}
+
+function textTruncate(el) {
+
+  // Define helpers
+  var helpers = {
+    getLine: function h_getLine(letter) {
+      return parseInt((letter.offsetTop - atom.top) / atom.height) + 1;
+    },
+    hideLetter: function h_hideLetter(letter) {
+      letter.style.display = 'none';
+    },
+    after: function h_after(node, after) {
+      if (node.nextSibling) {
+        node.parentNode.insertBefore(after, node.nextSibling);
+      } else {
+        node.parentNode.appendChild(after);
+      }
+    }
+  };
+
+  var text = { el: el };
+
+  // Define real content before
+  if (!text.el.dataset.raw) {
+    text.el.dataset.raw = el.textContent;
+  }
+  text.el.innerHTML = text.el.dataset.raw;
+  delete text.el.dataset.visible;
+
+  var after = { el: document.createElement('span') };
+  after.el.className = 'after';
+  document.body.appendChild(after.el);
+
+  // Set positionable all letter
+  var t = text.el.innerHTML.replace(/(.)/g, '<span>$1</span>');
+  text.el.innerHTML = t;
+
+  // get atomic letter dimension
+  var atom = {
+    left: text.el.firstChild.offsetLeft,
+    top: text.el.firstChild.offsetTop,
+    width: text.el.firstChild.offsetWidth,
+    height: text.el.firstChild.offsetHeight
+  };
+
+  // Possible lines number
+  text.lines = (text.el.offsetHeight -
+    (text.el.offsetHeight) % atom.height) / atom.height;
+
+  // Prepare ... element to be append if necessary
+  var etc = document.createElement('span');
+  etc.innerHTML = '...';
+  after.el.appendChild(etc);
+
+  // Append duration this is required
+  var duration = document.createElement('span');
+  duration.innerHTML = text.el.dataset.after;
+  after.el.appendChild(duration);
+
+  // Init width left to include the after element
+  text.widthLeft = text.el.clientWidth;
+
+  // After element
+  after.width = after.el.offsetWidth;
+
+  // Each letter
+  var line;
+  var i = 0;
+  var children = text.el.children;
+  var space = document.createTextNode(' ');
+
+  while (children[i]) {
+    var letter = children[i];
+    if (letter.className == after.el.className) {
+      i++;
+      continue;
+    }
+    line = helpers.getLine(letter);
+    // If in last line truncate
+    if (text.lines == line) {
+      if (letter.textContent != ' ') {
+        // If enought space left to print after element
+        text.widthLeft -= letter.offsetWidth;
+        if (text.widthLeft - after.width < 3 * atom.width && !after.already) {
+          after.already = true;
+          helpers.after(letter, space);
+          helpers.after(letter, after.el);
+          after.el.insertBefore(space, after.el.lastChild);
+        } else if (after.already) {
+          helpers.hideLetter(letter);
+        }
+      }
+    } else if (text.lines <= line || after.already == true) {
+      helpers.hideLetter(letter);
+    }
+    i++;
+  }
+  // This can be optimized, for sure !
+  if (!after.already) {
+    if (text.lines > line) {
+      // Remove etc child from after element
+      after.el.removeChild(etc);
+      text.el.appendChild(after.el);
+      text.el.insertBefore(space, after.el);
+    } else {
+      after.el.style.display = 'none';
+    }
+  }
+  text.el.dataset.visible = 'true';
 }
 
 
@@ -776,12 +931,42 @@ document.addEventListener('mozfullscreenchange', function() {
 
  // Pause on visibility change
 document.addEventListener('mozvisibilitychange', function visibilityChange() {
-  if (document.mozHidden && playing) {
-    pause();
-  } else if (!document.mozHidden && document.mozFullScreenElement) {
-    setControlsVisibility(true);
+  if (document.mozHidden) {
+    if (playing)
+      pause();
+
+    if (playerShowing)
+      releaseVideo();
+  }
+  else {
+    if (document.mozFullScreenElement)
+      setControlsVisibility(true);
+
+    if (playerShowing)
+      restoreVideo();
   }
 });
+
+// This app uses deprecated-hwvideo permission to access video decoding hardware
+// But Camera and Gallery also need to use that hardware, and those three apps
+// may only have one video playing at a time among them. So we need to be
+// careful to relinquish the hardware when we are not visible.
+
+var restoreTime;
+
+// Call this when the app is hidden
+function releaseVideo() {
+  restoreTime = dom.player.currentTime;
+  dom.player.removeAttribute('src');
+  dom.player.load();
+}
+
+// Call this when the app becomes visible again
+function restoreVideo() {
+  setVideoUrl(dom.player, currentVideo, function() {
+    dom.player.currentTime = restoreTime;
+  });
+}
 
 // show|hide controls over the player
 dom.videoControls.addEventListener('mousedown', playerMousedown);
@@ -791,6 +976,12 @@ dom.videoControls.addEventListener('mousedown', playerMousedown);
 window.addEventListener('resize', function() {
   if (dom.player.readyState !== HAVE_NOTHING) {
     setPlayerSize();
+  }
+
+  // reTruncate text
+  var texts = document.querySelectorAll('.details');
+  for (var i = 0; i < texts.length; i++) {
+    textTruncate(texts[i]);
   }
 });
 

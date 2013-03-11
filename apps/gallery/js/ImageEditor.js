@@ -1,3 +1,374 @@
+// This file contains Gallery code for editing images
+'use strict';
+
+var editedPhotoURL; // The blob URL of the photo we're currently editing
+var editSettings;
+var imageEditor;
+
+var editOptionButtons =
+  Array.slice($('edit-options').querySelectorAll('a.radio.button'), 0);
+
+var editBgImageButtons =
+  Array.slice($('edit-options').querySelectorAll('a.bgimage.button'), 0);
+
+// Edit mode event handlers
+$('edit-exposure-button').onclick = setEditTool.bind(null, 'exposure');
+$('edit-crop-button').onclick = setEditTool.bind(null, 'crop');
+$('edit-effect-button').onclick = setEditTool.bind(null, 'effect');
+$('edit-border-button').onclick = setEditTool.bind(null, 'border');
+$('edit-crop-none').onclick = undoCropHandler;
+$('edit-cancel-button').onclick = function() { exitEditMode(false); };
+$('edit-save-button').onclick = saveEditedImage;
+editOptionButtons.forEach(function(b) { b.onclick = editOptionsHandler; });
+
+// Ensure there is enough space to store an edited copy of photo n
+// and if there is, call editPhoto to do so
+function editPhotoIfCardNotFull(n) {
+  var fileinfo = files[n];
+  var imagesize = fileinfo.size;
+
+  photodb.freeSpace(function(freespace) {
+    // the edited image might take up more space on the disk, but
+    // not all that much more
+    if (freespace > imagesize * 2) {
+      editPhoto(n);
+    }
+    else {
+      alert(navigator.mozL10n.get('memorycardfull'));
+    }
+  });
+}
+
+function editPhoto(n) {
+  editedPhotoIndex = n;
+
+  // Start with no edits
+  editSettings = {
+    crop: {
+      x: 0, y: 0, w: files[n].metadata.width, h: files[n].metadata.height
+    },
+    gamma: 1,
+    borderWidth: 0,
+    borderColor: [0, 0, 0, 0]
+  };
+
+  // Start looking up the image file
+  photodb.getFile(files[n].name, function(file) {
+    // Once we get the file create a URL for it and use that url for the
+    // preview image and all the buttons that need it.
+    editedPhotoURL = URL.createObjectURL(file);
+
+    // Create the image editor object
+    // This has to come after setView or the canvas size is wrong.
+    imageEditor = new ImageEditor(editedPhotoURL,
+                                  $('edit-preview-area'),
+                                  editSettings);
+
+    // Configure the exposure tool as the first one shown
+    setEditTool('exposure');
+
+    // Set the exposure slider to its default value
+    exposureSlider.setExposure(0);
+
+    // Set the background for all of the image buttons
+    var backgroundImage = 'url(' + editedPhotoURL + ')';
+    editBgImageButtons.forEach(function(b) {
+      b.style.backgroundImage = backgroundImage;
+    });
+  });
+
+  // Display the edit screen
+  setView(editView);
+
+  // Set the default option buttons to correspond to those edits
+  editOptionButtons.forEach(function(b) { b.classList.remove('selected'); });
+  $('edit-crop-aspect-free').classList.add('selected');
+  $('edit-effect-none').classList.add('selected');
+  $('edit-border-none').classList.add('selected');
+}
+
+// Crop, Effect and border buttons call this
+function editOptionsHandler() {
+  // First, unhighlight all buttons in this group and then
+  // highlight the button that has just been chosen. These
+  // buttons have radio behavior
+  var parent = this.parentNode;
+  var buttons = parent.querySelectorAll('a.radio.button');
+  Array.forEach(buttons, function(b) { b.classList.remove('selected'); });
+  this.classList.add('selected');
+
+  if (this === $('edit-crop-aspect-free'))
+    imageEditor.setCropAspectRatio();
+  else if (this === $('edit-crop-aspect-portrait'))
+    imageEditor.setCropAspectRatio(2, 3);
+  else if (this === $('edit-crop-aspect-landscape'))
+    imageEditor.setCropAspectRatio(3, 2);
+  else if (this === $('edit-crop-aspect-square'))
+    imageEditor.setCropAspectRatio(1, 1);
+  else if (this.dataset.effect) {
+    editSettings.matrix = ImageProcessor[this.dataset.effect + '_matrix'];
+    imageEditor.edit();
+  }
+  else {
+    if (this.dataset.borderWidth) {
+      editSettings.borderWidth = parseFloat(this.dataset.borderWidth);
+    }
+    if (this.dataset.borderColor === 'white') {
+      editSettings.borderColor = [1, 1, 1, 1];
+    }
+    else if (this.dataset.borderColor === 'black') {
+      editSettings.borderColor = [0, 0, 0, 1];
+    }
+    imageEditor.edit();
+  }
+}
+
+/*
+ * This is the exposure slider component for edit mode.  This ought to be
+ * converted into a reusable slider module, but for now this is a
+ * custom version that hardcodes things like the -3 to +3 range of values.
+ */
+var exposureSlider = (function() {
+  var slider = document.getElementById('exposure-slider');
+  var bar = document.getElementById('sliderbar');
+  var thumb = document.getElementById('sliderthumb');
+
+  thumb.addEventListener('mousedown', sliderStartDrag);
+
+  var currentExposure;
+  var sliderStartPixel;
+  var sliderStartExposure;
+
+  function sliderStartDrag(e) {
+    document.addEventListener('mousemove', sliderDrag, true);
+    document.addEventListener('mouseup', sliderEndDrag, true);
+    sliderStartPixel = e.clientX;
+    sliderStartExposure = currentExposure;
+    e.preventDefault();
+  }
+
+  function sliderDrag(e) {
+    var delta = e.clientX - sliderStartPixel;
+    var exposureDelta = delta / (parseInt(bar.clientWidth) * .8) * 6;
+    var oldExposure = currentExposure;
+    setExposure(sliderStartExposure + exposureDelta);
+    if (currentExposure !== oldExposure)
+      slider.dispatchEvent(new Event('change', {bubbles: true}));
+    e.preventDefault();
+  }
+
+  function sliderEndDrag(e) {
+    document.removeEventListener('mousemove', sliderDrag, true);
+    document.removeEventListener('mouseup', sliderEndDrag, true);
+    e.preventDefault();
+  }
+
+  // Set the thumb position between -3 and +3
+  function setExposure(exposure) {
+    // Make sure it is not out of bounds
+    if (exposure < -3)
+      exposure = -3;
+    else if (exposure > 3)
+      exposure = 3;
+
+    // Round to the closest .25
+    exposure = Math.round(exposure * 4) / 4;
+
+    if (exposure === currentExposure)
+      return;
+
+    var barWidth = parseInt(bar.clientWidth);
+    var thumbWidth = parseInt(thumb.clientWidth);
+
+    // Remember the new exposure value
+    currentExposure = exposure;
+
+    // Convert exposure value to % position of thumb center
+    var percent = 10 + (exposure + 3) * 80 / 6;
+
+    // Convert percent to pixel position of thumb center
+    var pixel = barWidth * percent / 100;
+
+    // Compute pixel position of left edge of thumb
+    pixel -= thumbWidth / 2;
+
+    // Move the thumb to that position
+    thumb.style.left = pixel + 'px';
+
+    // Display exposure value in thumb
+    thumb.textContent = exposure;
+  }
+
+  return {
+    setExposure: setExposure,
+    getExposure: function() { return currentExposure; }
+  };
+}());
+
+$('exposure-slider').onchange = function() {
+  var stops = exposureSlider.getExposure();
+
+  // Convert the exposure compensation stops gamma correction value.
+  var factor = -1;  // XXX: adjust this factor to get something reasonable.
+  var gamma = Math.pow(2, stops * factor);
+  editSettings.gamma = gamma;
+  imageEditor.edit();
+};
+
+function setEditTool(tool) {
+  // Deselect all tool buttons and hide all options
+  var buttons = $('edit-toolbar').querySelectorAll('a.button');
+  Array.forEach(buttons, function(b) { b.classList.remove('selected'); });
+  var options = $('edit-options').querySelectorAll('div.edit-options-bar');
+  Array.forEach(options, function(o) { o.classList.add('hidden'); });
+
+  // If we were in crop mode, perform the crop and then
+  // exit crop mode. If the user tapped the Crop button then we'll go
+  // right back into crop mode, but this means that the Crop button both
+  // acts as a mode switch button and a "do the crop now" button.
+  imageEditor.cropImage();
+  imageEditor.hideCropOverlay();
+
+  // Now select and show the correct set based on tool
+  switch (tool) {
+  case 'exposure':
+    $('edit-exposure-button').classList.add('selected');
+    $('exposure-slider').classList.remove('hidden');
+    break;
+  case 'crop':
+    $('edit-crop-button').classList.add('selected');
+    $('edit-crop-options').classList.remove('hidden');
+    imageEditor.edit(function() {
+      imageEditor.showCropOverlay();
+    });
+    break;
+  case 'effect':
+    $('edit-effect-button').classList.add('selected');
+    $('edit-effect-options').classList.remove('hidden');
+    break;
+  case 'border':
+    $('edit-border-button').classList.add('selected');
+    $('edit-border-options').classList.remove('hidden');
+    break;
+  }
+}
+
+function undoCropHandler() {
+  // Switch to free-form cropping
+  Array.forEach($('edit-crop-options').querySelectorAll('a.radio.button'),
+                function(b) { b.classList.remove('selected'); });
+  $('edit-crop-aspect-free').classList.add('selected');
+  imageEditor.setCropAspectRatio(); // freeform
+
+  // And revert to full-size image
+  imageEditor.undoCrop();
+}
+
+function exitEditMode(saved) {
+  // Revoke the blob URL we've been using
+  URL.revokeObjectURL(editedPhotoURL);
+  editedPhotoURL = null;
+
+  // close the editor object
+  imageEditor.destroy();
+  imageEditor = null;
+
+  // We came in to edit mode from fullscreenView.  If the user cancels the edit
+  // go back to fullscreenView.  Otherwise, if the user saves the photo, we go
+  // back to thumbnail list view because that is where the newly saved
+  // image is going to show up.
+  // XXX: this isn't really right. Ideally the new photo should show up
+  // right next to the old one and we should go back to fullscreenView to view
+  // the edited photo.
+  if (saved) {
+    currentFileIndex = 0; // because the saved image will be newest
+    setView(thumbnailListView);
+  }
+  else
+    showFile(currentFileIndex);
+}
+
+// When the user clicks the save button, we produce a full-size version
+// of the edited image, save it into the media database and return to
+// photo view mode.
+// XXX: figure out what the image number of the edited photo is or will be
+// and return to viewing that one.  Ideally, edited photos would be grouped
+// with the original, rather than by date, but I'm not sure I can
+// do that sort order.  Ideally, I'd like the mediadb to not generate a
+// change event when we manually add something to it or at least have that
+// option
+function saveEditedImage() {
+  // If we are in crop mode, perform the crop before saving
+  if ($('edit-crop-button').classList.contains('selected'))
+    imageEditor.cropImage();
+
+  imageEditor.getFullSizeBlob('image/jpeg', function(blob) {
+
+    var original = files[editedPhotoIndex].name;
+    var basename, extension, filename;
+    var version = 1;
+    var p = original.lastIndexOf('.');
+    if (p === -1) {
+      basename = original;
+      extension = '';
+    }
+    else {
+      basename = original.substring(0, p);
+      extension = original.substring(p);
+    }
+
+    // Create a filename for the edited image.  Loop if necessary and
+    // increment the version number until we find a version a name that
+    // is not in use.
+    // XXX: this loop is O(n^2) and slow if the user saves many edits
+    // of the same image.
+    filename = basename + '.edit' + version + extension;
+    while (files.some(function(i) { return i.name === filename; })) {
+      version++;
+      filename = basename + '.edit' + version + extension;
+    }
+
+    // Now that we have a filename, save the file This will send a
+    // change event, which will cause us to rebuild our thumbnails.
+    // For now, the edited image will become the first thumbnail since
+    // it si the most recent one. Ideally, I'd like a more
+    // sophisticated sort order that put edited sets of photos next to
+    // each other.
+    photodb.addFile(filename, blob);
+
+    // We're done.
+    exitEditMode(true);
+  });
+}
+
+
+ function createThumbnailFromSource(fullSizeImage, sourceRectangle,
+                                    containerWidth, containerHeight, callback) {
+    // Create a thumbnail image
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d');
+
+    // infer the thumbnailHeight such that the aspect ratio stays the same
+    var scalex = containerWidth / sourceRectangle.w;
+    var scaley = containerHeight / sourceRectangle.h;
+    var scale = Math.min(Math.min(scalex, scaley), 1);
+
+    var thumbnailWidth = Math.floor(sourceRectangle.w * scale);
+    var thumbnailHeight = Math.floor(sourceRectangle.h * scale);
+
+    canvas.width = thumbnailWidth;
+    canvas.height = thumbnailHeight;
+
+    // Draw that region of the image into the canvas, scaling it down
+    context.drawImage(fullSizeImage, sourceRectangle.x, sourceRectangle.y,
+                      sourceRectangle.w, sourceRectangle.h, 0, 0,
+                      thumbnailWidth, thumbnailHeight);
+
+    canvas.toBlob(callback, 'image/jpeg');
+  }
+
+
+
 /*
  * ImageEditor.js: simple image editing and previews in a <canvas> element.
  *
@@ -29,8 +400,6 @@
  * canvas elements with ids edit-preview-canvas and edit-crop-canvas.
  * The stylesheet includes static styles to position those dyanamic elements.
  */
-'use strict';
-
 function ImageEditor(imageURL, container, edits, ready) {
   this.imageURL = imageURL;
   this.container = container;
@@ -42,20 +411,8 @@ function ImageEditor(imageURL, container, edits, ready) {
   // Start loading the image into a full-size offscreen image
   this.original = new Image();
   this.original.src = imageURL;
-  var self = this;
-
-  // When the image loads display it
-  this.original.onload = function() {
-    // Initialize the crop region to the full size of the original image
-    self.resetCropRegion();
-
-    // Display an edited preview of it
-    self.edit();
-
-    // If the constructor had a ready callback argument, call it now
-    if (ready)
-      ready();
-  }
+  this.preview = new Image();
+  this.preview.src = null;
 
   // The canvas that displays the preview
   this.previewCanvas = document.createElement('canvas');
@@ -64,10 +421,48 @@ function ImageEditor(imageURL, container, edits, ready) {
   this.previewCanvas.width = this.previewCanvas.clientWidth;
   this.previewCanvas.height = this.previewCanvas.clientHeight;
   this.processor = new ImageProcessor(this.previewCanvas);
+
+  // When the image loads display it
+  var self = this;
+  this.original.onload = function() {
+    // Initialize the crop region to the full size of the original image
+    self.resetCropRegion();
+    self.resetPreview();
+
+    // Display an edited preview of it
+    self.edit(function() {
+      if (ready)
+        ready();
+    });
+
+    // If the constructor had a ready callback argument, call it now
+  };
 }
+
+ImageEditor.prototype.generateNewPreview = function(callback) {
+  var self = this;
+  createThumbnailFromSource(this.original, this.source,
+                            this.previewCanvas.width, this.previewCanvas.height,
+    function(thumbnail) {
+      self.preview.src = URL.createObjectURL(thumbnail);
+      self.preview.onload = function() {
+        callback();
+      };
+    }
+  );
+};
+
+ImageEditor.prototype.resetPreview = function() {
+  if (this.preview.src) {
+    URL.revokeObjectURL(this.preview.src);
+    this.preview.removeAttribute('src');
+  }
+};
 
 ImageEditor.prototype.destroy = function() {
   this.processor.destroy();
+  this.resetPreview();
+  this.preview = null;
   this.original.src = '';
   this.original = null;
   this.container.removeChild(this.previewCanvas);
@@ -79,29 +474,35 @@ ImageEditor.prototype.destroy = function() {
 // displays the original image. Clients should call this function when the
 // desired edits change or when the size of the container changes (on
 // orientation change events, for example)
-ImageEditor.prototype.edit = function() {
+ImageEditor.prototype.edit = function(callback) {
+  if (!this.preview.src) {
+    var self = this;
+    this.generateNewPreview(function() {self.finishEdit(callback);});
+  } else {
+    this.finishEdit(callback);
+  }
+};
+
+ImageEditor.prototype.finishEdit = function(callback) {
   var canvas = this.previewCanvas;
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
 
-  // Source image dimensions
-  var source = this.source;
+  var xOffset = Math.floor((canvas.width - this.preview.width) / 2);
+  var yOffset = Math.floor((canvas.height - this.preview.height) / 2);
 
-  // Compute the destination rectangle in the preview canvas
-  var dest = this.dest;
-  var scalex = canvas.width / source.w;
-  var scaley = canvas.height / source.h;
-  var scale = Math.min(Math.min(scalex, scaley), 1);
+  this.dest.x = xOffset;
+  this.dest.y = yOffset;
+  this.dest.w = this.preview.width;
+  this.dest.h = this.preview.height;
 
-  dest.w = Math.floor(source.w * scale);
-  dest.h = Math.floor(source.h * scale);
-  dest.x = Math.floor((canvas.width - dest.w) / 2);
-  dest.y = Math.floor((canvas.height - dest.h) / 2);
-
-  this.processor.draw(this.original,
-                      source.x, source.y, source.w, source.h,
-                      dest.x, dest.y, dest.w, dest.h,
+  this.processor.draw(this.preview,
+                      0, 0, this.preview.width, this.preview.height,
+                      this.dest.x, this.dest.y, this.dest.w, this.dest.h,
                       this.edits);
+  if (callback) {
+    callback();
+  }
 };
 
 // Apply the edits offscreen and pass the full-size edited image as a blob
@@ -122,11 +523,13 @@ ImageEditor.prototype.getFullSizeBlob = function(type, callback) {
                  this.edits);
 
   // Now get the canvas contents as a file and pass to the callback
-  callback(canvas.mozGetAsFile('', type));
+  canvas.toBlob(function(blobData) {
+    callback(blobData);
 
-  // Deallocate stuff
-  processor.destroy();
-  canvas.width = 0;
+    // Deallocate stuff
+    processor.destroy();
+    canvas.width = 0;
+   }, type);
 };
 
 
@@ -173,6 +576,7 @@ ImageEditor.prototype.resetCropRegion = function resetCropRegion() {
   this.source.y = 0;
   this.source.w = this.original.width;
   this.source.h = this.original.height;
+
 };
 
 ImageEditor.prototype.drawCropControls = function(handle) {
@@ -507,20 +911,24 @@ ImageEditor.prototype.cropImage = function() {
   this.source.w = right - left;
   this.source.h = bottom - top;
 
+  this.resetPreview();
   // Adjust the image
-  this.edit();
-
-  // Hide and reshow the crop overlay to reset it to match the new image size
-  this.hideCropOverlay();
-  this.showCropOverlay();
+  this.edit(function() {
+    // Hide and reshow the crop overlay to reset it to match the new image size
+    this.hideCropOverlay();
+    this.showCropOverlay();
+  });
 };
 
 // Restore the image to its full original size
 ImageEditor.prototype.undoCrop = function() {
   this.resetCropRegion();
-  this.edit();
-  this.hideCropOverlay();
-  this.showCropOverlay();
+  this.resetPreview();
+  this.edit(function() {
+    // Hide and reshow the crop overlay to reset it to match the new image size
+    this.hideCropOverlay();
+    this.showCropOverlay();
+  });
 };
 
 // Pass no arguments for freeform 1,1 for square,
@@ -622,8 +1030,7 @@ function ImageProcessor(canvas) {
 
   // Define our shader programs
   var vshader = this.vshader = gl.createShader(gl.VERTEX_SHADER);
-  var vshadersrc = document.getElementById('edit-vertex-shader').text;
-  gl.shaderSource(vshader, vshadersrc);
+  gl.shaderSource(vshader, ImageProcessor.vertexShader);
   gl.compileShader(vshader);
   if (!gl.getShaderParameter(vshader, gl.COMPILE_STATUS)) {
     var error = new Error('Error compiling vertex shader:' +
@@ -633,8 +1040,7 @@ function ImageProcessor(canvas) {
   }
 
   var fshader = this.fshader = gl.createShader(gl.FRAGMENT_SHADER);
-  var fshadersrc = document.getElementById('edit-fragment-shader').text;
-  gl.shaderSource(fshader, fshadersrc);
+  gl.shaderSource(fshader, ImageProcessor.fragmentShader);
   gl.compileShader(fshader);
   if (!gl.getShaderParameter(fshader, gl.COMPILE_STATUS)) {
     var error = new Error('Error compiling fragment shader:' +
@@ -751,6 +1157,42 @@ ImageProcessor.prototype.draw = function(image,
     ]), gl.STATIC_DRAW);
   }
 };
+
+ImageProcessor.vertexShader =
+  'attribute vec2 src_pixel;\n' +  // pixel position in the image
+  'attribute vec2 dest_pixel;\n' + // pixel position on the canvas
+  'uniform vec2 canvas_size;\n' +  // size of destination canvas in pixels
+  'uniform vec2 image_size;\n' +   // size of source image in pixels
+  'varying vec2 src_position;\n' + // pass image position to the fragment shader
+  'void main() {\n' +
+  '  gl_Position = vec4(((dest_pixel/canvas_size)*2.0-1.0)*vec2(1,-1),0,1);\n' +
+  '  src_position = src_pixel / image_size;\n' +
+  '}';
+
+ImageProcessor.fragmentShader =
+  'precision mediump float;\n' +
+  'uniform sampler2D image;\n' +
+  'uniform float border_width;\n' +
+  'uniform vec4 border_color;\n' +
+  'uniform vec2 dest_size;\n' +    // size of the destination rectangle
+  'uniform vec2 dest_origin;\n' +  // upper-left corner of destination rectangle
+  'uniform vec4 gamma;\n' +
+  'uniform mat4 matrix;\n' +
+  'varying vec2 src_position;\n' + // from the vertex shader
+  'void main() {\n' +
+  // Use border color if we're over the border
+  '  if (gl_FragCoord.x < dest_origin.x + border_width ||\n' +
+  '      gl_FragCoord.y < dest_origin.y + border_width ||\n' +
+  '      gl_FragCoord.x > dest_origin.x + dest_size.x - border_width ||\n' +
+  '      gl_FragCoord.y > dest_origin.y + dest_size.y - border_width) {\n' +
+  '    gl_FragColor = border_color;\n' +
+  '    return;\n' +
+  '  }\n' +
+  // Otherwise take the image clor, apply gamma correction and
+  // the color manipulation matrix.
+  '  vec4 color = texture2D(image, src_position);\n' +
+  '  gl_FragColor = pow(color, gamma) * matrix;\n' +
+  '}';
 
 ImageProcessor.IDENTITY_MATRIX = [
   1, 0, 0, 0,

@@ -1,12 +1,15 @@
-requireApp('calendar/test/unit/helper.js', function() {
-  requireLib('ext/uuid.js');
-  requireLib('timespan.js');
-  requireLib('event_mutations.js');
-  requireLib('provider/abstract.js');
-  requireLib('provider/local.js');
-});
+/*
+requireLib('ext/uuid.js');
+requireLib('event_mutations.js');
+requireLib('provider/abstract.js');
+requireLib('provider/local.js');
+*/
 
-suite('provider/local', function() {
+requireLib('timespan.js');
+
+var uuid;
+
+suiteGroup('Provider.Local', function() {
 
   var subject;
   var app;
@@ -53,6 +56,13 @@ suite('provider/local', function() {
     });
   });
 
+  /* disabled in Bug 838993, to be reenabled asap in Bug 840489.
+   * this happens when using a firefox launched with a french locale, we
+   * probably need to mock the l10n library instead of using it.
+   *
+   *   1) [calendar] provider/local #findCalendars:
+   *        Error: expected 'Agenda hors-ligne' to equal 'Offline calendar'
+   *
   test('#findCalendars', function(done) {
     // local will always return the same
     // calendar id
@@ -65,6 +75,7 @@ suite('provider/local', function() {
       });
     });
   });
+  */
 
   suite('mutations', function() {
     var events;

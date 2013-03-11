@@ -38,6 +38,13 @@ mocksForUpdateManager.forEach(function(mockName) {
   }
 });
 
+/*
+// These tests are currently failing and have been temporarily disabled as per
+// Bug 838993. They should be fixed and re-enabled as soon as possible as per
+// Bug 840500.
+// Please also note: the outcome of this test suite is non-deterministic.
+// Failures occur inconsistently, so potential fixes should be thoroughly
+// vetted.
 suite('system/UpdateManager', function() {
   var realL10n;
   var realWifiManager;
@@ -171,7 +178,8 @@ suite('system/UpdateManager', function() {
           '<button id="updates-viaDataConnection-notnow-button" type="reset">',
             'Not Now',
           '</button>',
-          '<button id="updates-viaDataConnection-download-button" type="submit">',
+          '<button id="updates-viaDataConnection-download-button" ',
+              'type="submit">',
             'Download',
           '</button>',
         '</menu>',
@@ -579,36 +587,46 @@ suite('system/UpdateManager', function() {
         test('should be displayed only once', function() {
           var css = UpdateManager.container.classList;
           assert.isTrue(css.contains('displayed'));
-          assert.equal(MockNotificationScreen.wasMethodCalled['incExternalNotifications'], 1);
+          assert.equal(
+            MockNotificationScreen.wasMethodCalled['incExternalNotifications'],
+            1);
         });
 
         test('should not be displayed after timeout', function(done) {
           setTimeout(function() {
             var css = UpdateManager.container.classList;
             assert.isTrue(css.contains('displayed'));
-            assert.equal(MockNotificationScreen.wasMethodCalled['incExternalNotifications'], 1);
+            assert.equal(
+              MockNotificationScreen
+                .wasMethodCalled['incExternalNotifications'],
+              1);
             done();
           }, tinyTimeout * 2);
 
         });
       });
 
-      suite('notification behavior after addToDownloadsQueue after timeout', function() {
-        setup(function(done) {
-          setTimeout(function() {
+      suite('notification behavior after addToDownloadsQueue after timeout',
+        function() {
+          setup(function(done) {
+            setTimeout(function() {
+              var css = UpdateManager.container.classList;
+              assert.isFalse(css.contains('displayed'));
+              UpdateManager.addToDownloadsQueue(uAppWithDownloadAvailable);
+              done();
+            });
+          });
+
+        test('should not increment the counter if already displayed',
+          function() {
             var css = UpdateManager.container.classList;
-            assert.isFalse(css.contains('displayed'));
-            UpdateManager.addToDownloadsQueue(uAppWithDownloadAvailable);
-            done();
+            assert.isTrue(css.contains('displayed'));
+            assert.equal(
+              MockNotificationScreen
+                .wasMethodCalled['incExternalNotifications'],
+              1);
           });
         });
-
-        test('should not increment the counter if already displayed', function() {
-          var css = UpdateManager.container.classList;
-          assert.isTrue(css.contains('displayed'));
-          assert.equal(MockNotificationScreen.wasMethodCalled['incExternalNotifications'], 1);
-        });
-      });
 
       suite('displaying the container after a timeout', function() {
         setup(function() {
@@ -620,7 +638,10 @@ suite('system/UpdateManager', function() {
           setTimeout(function() {
             var css = UpdateManager.container.classList;
             assert.isTrue(css.contains('displayed'));
-            assert.equal(MockNotificationScreen.wasMethodCalled['incExternalNotifications'], 1);
+            assert.equal(
+              MockNotificationScreen
+                .wasMethodCalled['incExternalNotifications'],
+              1);
             done();
           }, tinyTimeout * 2);
         });
@@ -659,14 +680,15 @@ suite('system/UpdateManager', function() {
             }, tinyTimeout * 1.5);
           });
 
-          test('should reset toaster value when notification was activated', function(done) {
-            setTimeout(function() {
-              UpdateManager.addToUpdatesQueue(updatableApps[1]);
-              assert.equal('updateAvailableInfo{"n":1}',
-                          UpdateManager.toasterMessage.textContent);
-              done();
-            }, tinyTimeout * 2);
-          });
+          test('should reset toaster value when notification was activated',
+            function(done) {
+              setTimeout(function() {
+                UpdateManager.addToUpdatesQueue(updatableApps[1]);
+                assert.equal('updateAvailableInfo{"n":1}',
+                            UpdateManager.toasterMessage.textContent);
+                done();
+              }, tinyTimeout * 2);
+            });
 
           test('should show the right message', function(done) {
             setTimeout(function() {
@@ -958,10 +980,11 @@ suite('system/UpdateManager', function() {
       setup(function() {
         systemUpdatable = new MockSystemUpdatable();
         UpdateManager.updatableApps = updatableApps;
-        [systemUpdatable, uAppWithDownloadAvailable].forEach(function(updatable) {
-          UpdateManager.addToUpdatesQueue(updatable);
-          UpdateManager.addToDownloadsQueue(updatable);
-        });
+        [systemUpdatable, uAppWithDownloadAvailable].forEach(
+          function(updatable) {
+            UpdateManager.addToUpdatesQueue(updatable);
+            UpdateManager.addToDownloadsQueue(updatable);
+          });
 
         UpdateManager.cancelAllDownloads();
       });
@@ -1056,7 +1079,9 @@ suite('system/UpdateManager', function() {
         });
       });
 
-      test('should handle clicking download in the data connection warning dialog', function() {
+      test('should handle clicking download in' +
+            ' the data connection warning dialog',
+          function() {
         UpdateManager.downloadDialog.dataset.nowifi = true;
 
         var evt = {
@@ -1066,16 +1091,22 @@ suite('system/UpdateManager', function() {
         };
 
         UpdateManager.requestDownloads(evt);
-        MockasyncStorage.getItem('gaia.system.isDataConnectionWarningDialogEnabled', function(value) {
-          assert.isFalse(value);
-        });
+        MockasyncStorage.getItem(
+          'gaia.system.isDataConnectionWarningDialogEnabled',
+          function(value) {
+            assert.isFalse(value);
+          });
         assert.isFalse(UpdateManager._isDataConnectionWarningDialogEnabled);
-        assert.equal(UpdateManager.downloadDialog.dataset.dataConnectionInlineWarning, 'true');
+        assert.equal(
+          UpdateManager.downloadDialog.dataset.dataConnectionInlineWarning,
+          'true');
 
         MockasyncStorage.mTeardown();
       });
 
-      test('should handle clicking download when using data connection in the first time', function() {
+      test('should handle clicking download when using data connection ' +
+            'in the first time',
+          function() {
         UpdateManager.downloadDialog.dataset.nowifi = true;
 
         var evt = document.createEvent('MouseEvents');
@@ -1104,7 +1135,8 @@ suite('system/UpdateManager', function() {
         UpdateManager.startDownloads = realStartDownloadsFunc;
       });
 
-      test('should handle cancellation on the data connection warning dialog', function() {
+      test('should handle cancellation on the data connection warning dialog',
+          function() {
         UpdateManager.cancelDataConnectionUpdatesPrompt();
 
         var css = UpdateManager.downloadViaDataConnectionDialog.classList;
@@ -1447,3 +1479,4 @@ suite('system/UpdateManager', function() {
     });
   });
 });
+*/

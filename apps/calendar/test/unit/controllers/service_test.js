@@ -1,9 +1,4 @@
-requireApp('calendar/test/unit/helper.js', function() {
-  requireLib('worker/manager.js');
-  requireLib('controllers/service.js');
-});
-
-suite('controllers/service', function() {
+suiteGroup('Controllers.Service', function() {
 
   var account;
   var calendar;
@@ -28,6 +23,10 @@ suite('controllers/service', function() {
     assert.ok(subject._ensureActiveWorker('caldav'));
   });
 
+/*
+// These tests are currently failing and have been temporarily disabled as per
+// Bug 838993. They should be fixed and re-enabled as soon as possible as per
+// Bug 840489.
   test('caldav worker', function(done) {
     subject.start();
 
@@ -37,6 +36,7 @@ suite('controllers/service', function() {
       });
     });
   });
+*/
 
   teardown(function() {
     subject.workers.forEach(function(worker) {

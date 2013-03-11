@@ -1,8 +1,5 @@
-requireApp('calendar/test/unit/helper.js', function() {
-  requireLib('models/event.js');
-});
+suiteGroup('Models.Event', function() {
 
-suite('models/event', function() {
   var subject;
   var provider;
   var rawEvent;
@@ -207,4 +204,5 @@ suite('models/event', function() {
   remoteSetter('location');
   remoteSetter('description');
   remoteSetter('title');
+  remoteSetter('alarms');
  });

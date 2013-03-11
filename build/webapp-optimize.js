@@ -3,7 +3,6 @@ function debug(str) {
   //dump(' -*- webapp-optimize.js: ' + str + '\n');
 }
 
-
 /**
  * Expose a global `win' object and load `l10n.js' in it --
  * note: the `?reload' trick ensures we don't load a cached `l10njs' library.
@@ -13,6 +12,11 @@ var win = { navigator: {} };
 Services.scriptloader.loadSubScript('file:///' + GAIA_DIR +
     '/shared/js/l10n.js?reload=' + new Date().getTime(), win);
 
+
+let scope = {};
+Services.scriptloader.loadSubScript('file:///' + GAIA_DIR +
+    '/build/jsmin.js?reload=' + new Date().getTime(), scope);
+const { JSMin } = scope;
 
 /**
  * Locale list -- by default, only the default one
@@ -28,8 +32,9 @@ l10nDictionary.locales[GAIA_DEFAULT_LOCALE] = {};
 /**
  * whitelist by app name for javascript asset aggregation.
  */
-const JS_AGGREGATION_WHITELIST = [
-  'calendar'
+const JS_AGGREGATION_BLACKLIST = [
+  // https://bugzilla.mozilla.org/show_bug.cgi?id=839574
+  'system'
 ];
 
 /**
@@ -129,6 +134,14 @@ function optimize_aggregateJsResources(doc, webapp, htmlFile) {
 
     // fetch the whole file append it to the comment.
     content += optimize_getFileContent(webapp, htmlFile, script.src);
+
+    // Let's minify the scripts file in order to save some spaces
+    // and to make parser's life better.
+    try {
+      content = JSMin(content).code;
+    } catch(e) {
+      debug('Failed to minify content: ' + e);
+    }
 
     let config = normal;
 
@@ -310,7 +323,8 @@ function optimize_compile(webapp, file) {
       let newFile = new FileUtils.File(newPath);
       optimize_embedl10nResources(win.document, dictionary);
 
-      if (JS_AGGREGATION_WHITELIST.indexOf(webapp.sourceDirectoryName) !== -1) {
+      if (GAIA_OPTIMIZE == 1 &&
+          JS_AGGREGATION_BLACKLIST.indexOf(webapp.sourceDirectoryName) === -1) {
         optimize_aggregateJsResources(win.document, webapp, newFile);
         dump(
           '[optimize] aggregating javascript for : "' +
@@ -383,4 +397,3 @@ Gaia.webapps.forEach(function(webapp) {
 });
 
 debug('End');
-

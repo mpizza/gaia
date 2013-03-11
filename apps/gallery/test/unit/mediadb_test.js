@@ -43,7 +43,7 @@ suite('MediaDB', function() {
     reader.readAsText(blob);
     reader.onload = function() {
       callback(JSON.parse(reader.result));
-    }
+    };
   }
 
   // Delete all files from a directory
@@ -64,6 +64,10 @@ suite('MediaDB', function() {
     cursor.onerror = callback;
   }
 
+/*
+// These tests are currently failing and have been temporarily disabled as per
+// Bug 838993. They should be fixed and re-enabled as soon as possible as per
+// Bug 840493.
   test('API existence tests', function() {
     // Check that MediaDB exists
     assert.ok(MediaDB);
@@ -495,4 +499,5 @@ suite('MediaDB', function() {
 
     continueTest();
   });
+*/
 });

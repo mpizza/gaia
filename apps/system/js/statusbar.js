@@ -24,7 +24,7 @@ function AnimatedIcon(element, path, frames, delay) {
     var h = image.height / frames;
 
     context.drawImage(image, 0, 0, w, h, 0, 0, w, h);
-  }
+  };
 
   this.start = function() {
     var self = this;
@@ -42,14 +42,14 @@ function AnimatedIcon(element, path, frames, delay) {
           }
       }, delay);
     }
-  }
+  };
 
   this.stop = function() {
     if (this.timerId != null) {
       clearInterval(this.timerId);
       this.timerId = null;
     }
-  }
+  };
 }
 
 var StatusBar = {
@@ -102,7 +102,10 @@ var StatusBar = {
    */
   systemDownloadsCount: 0,
 
-  /* Objects used to animate the system downloads and network activity canvas elements */
+  /**
+   * Objects used to animate the system downloads and
+   * network activity canvas elements
+   */
   networkActivityAnimation: null,
   systemDownloadsAnimation: null,
 
@@ -166,14 +169,25 @@ var StatusBar = {
     // Listen to 'moztimechange'
     window.addEventListener('moztimechange', this);
 
+    // Listen to 'appwillclose', 'appopen', 'home', 'holdhome', 'unlock'
+    // to determine the visible state of statusbar
+    window.addEventListener('home', this);
+    window.addEventListener('holdhome', this);
+    window.addEventListener('appwillclose', this);
+    window.addEventListener('appopen', this);
+    window.addEventListener('unlock', this);
+
+    // Listen to 'mozfullscreenchange' to see if we should hide statusbar
+    window.addEventListener('mozfullscreenchange', this);
+
     this.systemDownloadsCount = 0;
 
     // Create the objects used to animate the statusbar-network-activity and
     // statusbar-system-downloads canvas elements
     this.networkActivityAnimation = new AnimatedIcon(this.icons.networkActivity,
-      'style/statusbar/images/network-activity-flat.png', 6, 200);
+      '/style/statusbar/images/network-activity-flat.png', 6, 200);
     this.systemDownloadsAnimation = new AnimatedIcon(this.icons.systemDownloads,
-      'style/statusbar/images/system-downloads-flat.png', 8, 130);
+      '/style/statusbar/images/system-downloads-flat.png', 8, 130);
 
     this.setActive(true);
   },
@@ -250,7 +264,30 @@ var StatusBar = {
       case 'moznetworkdownload':
         this.update.networkActivity.call(this);
         break;
+
+      case 'appopen':
+      case 'mozfullscreenchange':
+      case 'unlock':
+        if (this.screen.classList.contains('fullscreen-app') ||
+            document.mozFullScreen) {
+          this.hide();
+        }
+        break;
+
+      case 'appwillclose':
+      case 'home':
+      case 'holdhome':
+        this.show();
+        break;
     }
+  },
+
+  show: function sb_show() {
+    this.element.classList.remove('hidden');
+  },
+
+  hide: function sb_hide() {
+    this.element.classList.add('hidden');
   },
 
   setActive: function sb_setActive(active) {
@@ -281,6 +318,10 @@ var StatusBar = {
 
       window.addEventListener('moznetworkupload', this);
       window.addEventListener('moznetworkdownload', this);
+
+      if (LockScreen.locked) {
+        this.show();
+      }
     } else {
       clearTimeout(this._clockTimer);
 

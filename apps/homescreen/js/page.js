@@ -16,9 +16,18 @@ function Icon(descriptor, app) {
   this.updateAppStatus(app);
 }
 
+
+// Support rendering icons for different screens
+var BASE_WIDTH = 320;
+var SCALE_RATIO = window.innerWidth / BASE_WIDTH;
+var MIN_ICON_SIZE = 52 * SCALE_RATIO;
+var MAX_ICON_SIZE = 60 * SCALE_RATIO;
+
 Icon.prototype = {
-  MIN_ICON_SIZE: 52,
-  MAX_ICON_SIZE: 60,
+
+  MAX_ICON_SIZE: MAX_ICON_SIZE,
+
+  MIN_ICON_SIZE: MIN_ICON_SIZE,
 
   DEFAULT_BOOKMARK_ICON_URL: window.location.protocol + '//' +
                     window.location.host + '/style/images/default_favicon.png',
@@ -57,6 +66,7 @@ Icon.prototype = {
      *   <span class="options"></span>
      * </li>
      */
+
     var container = this.container = document.createElement('li');
     container.className = 'icon';
     if (this.descriptor.hidden) {
@@ -81,21 +91,16 @@ Icon.prototype = {
 
     // Image
     var img = this.img = new Image();
-    icon.appendChild(img);
+    img.setAttribute('role', 'presentation');
+    img.width = MAX_ICON_SIZE + 4 * SCALE_RATIO;
+    img.height = MAX_ICON_SIZE + 4 * SCALE_RATIO;
     img.style.visibility = 'hidden';
-    if (this.downloading) {
-      img.src = descriptor.icon;
-      img.style.visibility = 'visible';
+    if (descriptor.renderedIcon) {
+      this.displayRenderedIcon();
     } else {
-      img.setAttribute('role', 'presentation');
-      img.width = 64;
-      img.height = 64;
-      if (descriptor.renderedIcon) {
-        this.displayRenderedIcon();
-      } else {
-        this.fetchImageData();
-      }
+      this.fetchImageData();
     }
+    icon.appendChild(img);
 
     // Label
 
@@ -206,6 +211,7 @@ Icon.prototype = {
     }
 
     img.onload = function icon_loadSuccess() {
+      img.onload = img.onerror = null;
       if (blob)
         window.URL.revokeObjectURL(img.src);
       self.renderImage(img);
@@ -216,16 +222,18 @@ Icon.prototype = {
         window.URL.revokeObjectURL(img.src);
       img.src = getDefaultIcon(self.app);
       img.onload = function icon_errorIconLoadSucess() {
+        img.onload = null;
         self.renderImage(img);
       };
+      img.onerror = null;
     };
   },
 
   renderImageForBookMark: function icon_renderImageForBookmark(img) {
     var self = this;
     var canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
+    canvas.width = MAX_ICON_SIZE + 4 * SCALE_RATIO;
+    canvas.height = MAX_ICON_SIZE + 4 * SCALE_RATIO;
     var ctx = canvas.getContext('2d');
 
     // Draw the background
@@ -235,12 +243,14 @@ Icon.prototype = {
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 2;
       ctx.shadowOffsetY = 2;
-      ctx.drawImage(background, 2, 2);
+      ctx.drawImage(background, 2 * SCALE_RATIO,
+                    2 * SCALE_RATIO, MAX_ICON_SIZE, MAX_ICON_SIZE);
       // Disable smoothing on icon resize
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
       ctx.mozImageSmoothingEnabled = false;
-      ctx.drawImage(img, 16, 16, 32, 32);
+      ctx.drawImage(img, 16 * SCALE_RATIO, 16 * SCALE_RATIO,
+                    32 * SCALE_RATIO, 32 * SCALE_RATIO);
       canvas.toBlob(self.renderBlob.bind(self));
     };
   },
@@ -252,8 +262,8 @@ Icon.prototype = {
     }
 
     var canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
+    canvas.width = MAX_ICON_SIZE + 4 * SCALE_RATIO;
+    canvas.height = MAX_ICON_SIZE + 4 * SCALE_RATIO;
 
     var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -263,12 +273,12 @@ Icon.prototype = {
 
     // Deal with very small or very large icons
     img.width =
-        Math.min(this.MAX_ICON_SIZE, Math.max(img.width, this.MIN_ICON_SIZE));
+        Math.min(MAX_ICON_SIZE, Math.max(img.width, MAX_ICON_SIZE));
     img.height =
-        Math.min(this.MAX_ICON_SIZE, Math.max(img.height, this.MIN_ICON_SIZE));
+        Math.min(MAX_ICON_SIZE, Math.max(img.height, MAX_ICON_SIZE));
 
-    var width = Math.min(img.width, canvas.width - 4);
-    var height = Math.min(img.width, canvas.height - 4);
+    var width = Math.min(img.width, canvas.width - 4 * SCALE_RATIO);
+    var height = Math.min(img.width, canvas.height - 4 * SCALE_RATIO);
     ctx.drawImage(img,
                   (canvas.width - width) / 2,
                   (canvas.height - height) / 2,
@@ -512,11 +522,6 @@ function Page(container, icons) {
 Page.prototype = {
 
   /*
-   * It defines the threshold in pixels to consider a gesture like a tap event
-   */
-  tapThreshold: 10,
-
-  /*
    * Renders a page for a list of apps
    *
    * @param{Array} icons
@@ -640,12 +645,12 @@ Page.prototype = {
    */
   tap: function pg_tap(elem) {
     if (Homescreen.isInEditMode()) {
-      if (elem.className === 'options') {
+      if (elem.classList.contains('options')) {
         var icon = GridManager.getIcon(elem.parentNode.dataset);
         if (icon.app)
           Homescreen.showAppDialog(icon.app);
       }
-    } else if (elem.className === 'icon') {
+    } else if ('isIcon' in elem.dataset) {
       var icon = GridManager.getIcon(elem.dataset);
       if (!icon.app)
         return;
@@ -738,7 +743,7 @@ Page.prototype = {
    * the icon that was at the last place and will be hidden will eventually flow
    * to the next page. This is done in GridManager's ensurePagesOverflow
    *
-   * @param{Object} icon the icon to be added.
+   * @param {Object} icon the icon to be added.
    */
   appendIconVisible: function pg_appendIconVisible(icon) {
     if (this.getNumIcons() >= GridManager.pageHelper.maxIconsPerPage) {

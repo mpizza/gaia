@@ -82,7 +82,7 @@ var AppIntegration = (function() {
       return JSON.parse(fs.readFileSync(testvars));
     }
 
-    console.error('"' + testvars + '" does not exist.');
+    console.error('ERROR: "' + testvars + '" does not exist.');
     return {};
   }
 
@@ -182,6 +182,16 @@ var AppIntegration = (function() {
       instance.next();
     },
 
+    createCommand: function(func) {
+      var command = func + '(' + this.manifestURL.quote();
+      if (this.entryPoint) {
+        command += ', ' + this.entryPoint.quote();
+      }
+      command += ')';
+
+      return command;
+    },
+
     /**
      * Closes the app and switches focus back to system.
      */
@@ -195,12 +205,8 @@ var AppIntegration = (function() {
         // will switch back to the main frame.
         yield device.switchToFrame();
 
-        var script = 'window.wrappedJSObject.WindowManager.kill("' +
-                        self.origin +
-                      '")';
-
-        // Function.toString is busted (804404)
-        yield device.executeScript(script);
+        var closeCommand = self.createCommand('GaiaApps.closeWithManifestURL');
+        var result = yield device.executeAsyncScript(closeCommand);
 
         done();
       }, callback);
@@ -222,8 +228,6 @@ var AppIntegration = (function() {
       this.task(function(app, next, done) {
         var device = app.device;
 
-        yield device.setScriptTimeout(15000);
-
         yield IntegrationHelper.importScript(
           device,
           '/tests/atoms/gaia_lock_screen.js',
@@ -240,9 +244,8 @@ var AppIntegration = (function() {
           MochaTask.nodeNext
         );
 
-        var result = yield device.executeAsyncScript(
-          'GaiaApps.launchWithName("' + self.appName + '");'
-        );
+        var launchCommand = self.createCommand('GaiaApps.launchWithManifestURL');
+        var result = yield device.executeAsyncScript(launchCommand);
 
         yield device.switchToFrame(result.frame);
 
@@ -251,8 +254,10 @@ var AppIntegration = (function() {
         self.name = result.name;
         self.frame = result.frame;
 
-        var body = yield device.findElement('body');
-        yield app.waitUntilElement(body, 'displayed');
+        if (waitForBody) {
+          var body = yield device.findElement('body');
+          yield app.waitUntilElement(body, 'displayed');
+        }
 
         done(null, self);
 
@@ -575,8 +580,34 @@ var AppIntegration = (function() {
         }
       }
       return toUpdate;
-    }
+    },
 
+    observePerfEvents: function(stopEventName) {
+      var self = this;
+
+      this.task(function (app, next, done) {
+        yield IntegrationHelper.importScript(
+          app.device,
+          'tests/performance/performance_helper_atom.js',
+          next
+        );
+
+        var helperObject = 'window.wrappedJSObject.PerformanceHelperAtom';
+        yield app.device.executeAsyncScript(
+          helperObject + '.register();'
+        );
+
+        var results = yield app.device.executeAsyncScript(
+          helperObject + '.waitForEvent("' + stopEventName + '");'
+        );
+
+        yield app.device.executeAsyncScript(
+          helperObject + '.unregister();'
+        );
+
+        done(null, results);
+      });
+    }
   };
 
   return AppIntegration;

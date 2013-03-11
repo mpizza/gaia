@@ -29,18 +29,25 @@ const Homescreen = (function() {
       if (document.location.hash != '#root')
         return;
 
+      // this happens when the user presses the 'home' button
       if (Homescreen.isInEditMode()) {
         exitFromEditMode();
       } else {
         GridManager.goToPage(landingPage);
       }
+      GridManager.ensurePanning();
     });
 
-    GridManager.init('.apps', '.dockWrapper', function gm_init() {
+    var tapThreshold = Configurator.getSection('tap_threshold');
+    if (typeof(tapThreshold) === 'undefined') {
+      tapThreshold = 10;
+    }
+
+    GridManager.init('.apps', '.dockWrapper', tapThreshold, function gm_init() {
       PaginationBar.show();
       if (document.location.hash === '#root') {
-        // Switch to the first page only if the user has not already start to pan
-        // while home is loading
+        // Switch to the first page only if the user has not already
+        // start to pan while home is loading
         GridManager.goToPage(landingPage);
       }
       DragDropManager.init();
@@ -50,9 +57,8 @@ const Homescreen = (function() {
 
   function exitFromEditMode() {
     Homescreen.setMode('normal');
-    GridManager.markDirtyState();
     ConfirmDialog.hide();
-    GridManager.goToPage(GridManager.pageHelper.getCurrentPageNumber());
+    GridManager.exitFromEditMode();
   }
 
   document.addEventListener('mozvisibilitychange', function mozVisChange() {
