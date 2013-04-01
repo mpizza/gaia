@@ -22,15 +22,16 @@ var Canvas = {
     this.pad.style.width = this.video.style.width;
     this.pad.style.height = this.video.style.height;
     this.cloneBtn.addEventListener('click', this.copy_video.bind(this));
-    console.log('Gary canvas_init');
+    console.log('canvas_init');
   },
   
    copy_video: function canvas_copy_video(e) {
     var width = document.body.clientHeight/2;
     var height = document.body.clientWidth/2;
-    console.log('Gary copy_video');
+    console.log('Gary copy_video start');
     var context = this.pad.getContext('2d');
-    context.drawImage(this.video, 0, 0, width, height);
+    context.drawImage(this.video, 0, 0, 100, 100);
+    console.log('Gary copy_video end');
    }
 }
 
