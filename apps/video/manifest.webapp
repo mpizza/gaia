@@ -7,7 +7,9 @@
     "name": "The Gaia Team",
     "url": "https://github.com/mozilla-b2g/gaia"
   },
+  "fullscreen": true,
   "permissions": {
+    "storage":{},
     "device-storage:pictures":{ "access": "readwrite" },
     "device-storage:videos":{ "access": "readwrite" },
     "settings":{ "access": "readonly" },
@@ -40,6 +42,14 @@
   },
   "activities": {
     "view" : {
+      "filters": {
+        "type": ["video/webm", "video/mp4", "video/3gpp", "video/youtube"]
+      },
+      "href": "view.html",
+      "disposition": "inline",
+      "returnValue": true
+    },
+    "open" : {
       "filters": {
         "type": ["video/webm", "video/mp4", "video/3gpp", "video/youtube"]
       },

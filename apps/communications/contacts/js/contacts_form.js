@@ -141,6 +141,16 @@ contacts.Form = (function() {
       if (event.target.tagName == 'BUTTON')
         saveButton.removeAttribute('disabled');
     });
+
+    formView.addEventListener('ValueModified', function onValueModified(event) {
+      if (!event.detail) {
+        return;
+      }
+
+      if (event.detail.prevValue !== event.detail.newValue) {
+        saveButton.removeAttribute('disabled');
+      }
+    });
   };
 
   var render = function cf_render(contact, callback, pFbContactData,
@@ -169,7 +179,7 @@ contacts.Form = (function() {
     saveButton.textContent = _('update');
     currentContact = contact;
     deleteContactButton.parentNode.classList.remove('hide');
-    formTitle.innerHTML = _('editContact');
+    formTitle.textContent = _('editContact');
     currentContactId.value = contact.id;
     givenName.value = contact.givenName || '';
     familyName.value = contact.familyName || '';
@@ -228,11 +238,11 @@ contacts.Form = (function() {
     saveButton.setAttribute('disabled', 'disabled');
     saveButton.textContent = _('done');
     deleteContactButton.parentNode.classList.add('hide');
-    formTitle.innerHTML = _('addContact');
+    formTitle.textContent = _('addContact');
 
     params = params || {};
 
-    givenName.value = params.giveName || '';
+    givenName.value = params.givenName || '';
     familyName.value = params.lastName || '';
     company.value = params.company || '';
 
@@ -355,6 +365,23 @@ contacts.Form = (function() {
     return photo;
   };
 
+  var CATEGORY_WHITE_LIST = ['gmail', 'live'];
+  function updateCategoryForImported(contact) {
+    if (Array.isArray(contact.category)) {
+      var total = CATEGORY_WHITE_LIST.length;
+      var idx = -1;
+      for (var i = 0; i < total; i++) {
+        var idx = contact.category.indexOf(CATEGORY_WHITE_LIST[i]);
+        if (idx !== -1) {
+          break;
+        }
+      }
+      if (idx !== -1) {
+        contact.category[idx] = contact.category[idx] + '/updated';
+      }
+    }
+  }
+
   var saveContact = function saveContact() {
     currentContact = currentContact || {};
     currentContact = deviceContact || currentContact;
@@ -441,6 +468,7 @@ contacts.Form = (function() {
       contact.init(myContact);
     }
 
+    updateCategoryForImported(contact);
     var request = navigator.mozContacts.save(contact);
 
     request.onsuccess = function onsuccess() {
@@ -572,10 +600,9 @@ contacts.Form = (function() {
     var emails = dom.querySelector('#contacts-form-emails');
     var addresses = dom.querySelector('#contacts-form-addresses');
     var notes = dom.querySelector('#contacts-form-notes');
-    phones.innerHTML = '';
-    emails.innerHTML = '';
-    addresses.innerHTML = '';
-    notes.innerHTML = '';
+
+    [phones, emails, addresses, notes].forEach(utils.dom.removeChildNodes);
+
     counters = {
       'tel': 0,
       'email': 0,

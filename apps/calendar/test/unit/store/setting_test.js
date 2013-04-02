@@ -79,6 +79,17 @@ suite('store/setting', function() {
       subject.getValue('syncFrequency', function(err, value) {
         done(function() {
           assert.equal(value, subject.defaults.syncFrequency);
+          assert.ok(value);
+        });
+      });
+    });
+
+    test('with a zero default', function(done) {
+      subject.defaults.someZeroDefault = 0;
+      subject.getValue('someZeroDefault', function(err, value) {
+        done(function() {
+          assert.equal(value, subject.defaults.someZeroDefault);
+          assert.equal(value, 0);
         });
       });
     });
@@ -97,6 +108,32 @@ suite('store/setting', function() {
               assert.equal(value, 200, 'returns correct value');
               assert.equal(value, cachedValue, 'cached value is equal');
             });
+          });
+        });
+      });
+    });
+  });
+
+  suite('Bug #855782 - Settings were not being cached', function() {
+
+    test('getting, then seting a value will overwrite cache', function(done) {
+      var key = 'someFooBar';
+
+      // The cache needs to be empty to test this case
+      assert.ok(!subject._cached[key]);
+
+      subject.defaults[key] = 'bbq';
+      subject.getValue(key, function(err, value) {
+
+        assert.equal(value, subject.defaults[key]);
+
+        subject.set(key, 'ketchup', null, function(err, value) {
+          assert.notEqual(value, subject.defaults[key]);
+
+          subject.getValue(key, function(err, value) {
+            assert.equal(value, 'ketchup');
+            assert.notEqual(value, subject.defaults[key]);
+            done();
           });
         });
       });

@@ -264,7 +264,7 @@
       #poweroff-splash > img {
         width: 100%;
         height: 100%;
-        position: absolute;        
+        position: absolute;
         opacity: 1;
         transition: opacity 1s ease 2s;
       }
@@ -273,7 +273,7 @@
       #poweroff-splash > video {
         width: 100%;
         height: 100%;
-        position: absolute;        
+        position: absolute;
         opacity: 1;
         transition: opacity 1s ease;
       }
@@ -424,7 +424,7 @@
               <div id="pinArea" hidden>
                 <div data-l10n-id="simPin">SIM PIN</div>
                 <div class="input-wrapper">
-                  <input name="simpin" type="number" size="8" maxlength="8" />
+                  <input name="simpin" type="number" x-inputmode="digits" size="8" maxlength="8" />
                   <input name="simpinVis" type="text" size="8" maxlength="8" />
                 </div>
               </div>
@@ -432,16 +432,16 @@
               <div id="pukArea" hidden>
                 <div data-l10n-id="pukCode">PUK Code</div>
                 <div class="input-wrapper">
-                  <input name="simpuk" type="number" size="8" maxlength="8" />
+                  <input name="simpuk" type="number" x-inputmode="digits" size="8" maxlength="8" />
                   <input name="simpukVis" type="text" size="8" maxlength="8" />
                 </div>
               </div>
-              <!-- sim nck input field -->
-              <div id="nckArea" hidden>
-                <div data-l10n-id="nckCode">NCK Code</div>
+              <!-- sim nck/cck/spck input field -->
+              <div id="xckArea" hidden>
+                <div name="xckDesc" data-l10n-id="nckCode">NCK Code</div>
                 <div class="input-wrapper">
-                  <input name="nckpin" type="number" size="16" maxlength="16" />
-                  <input name="nckpinVis" type="text" size="16" maxlength="16" />
+                  <input name="xckpin" type="number" size="16" maxlength="16" />
+                  <input name="xckpinVis" type="text" size="16" maxlength="16" />
                 </div>
               </div>
               <!-- new sim pin input field -->
@@ -450,15 +450,17 @@
                   Create PIN (must contain 4 to 8 digits)
                 </div>
                 <div class="input-wrapper">
-                  <input name="newSimpin" type="number" size="8" maxlength="8" />
+                  <input name="newSimpin" type="number" x-inputmode="digits" size="8" maxlength="8" />
                   <input name="newSimpinVis" type="text" size="8" maxlength="8" />
                 </div>
               </div>
               <!-- confirm new sim pin input field -->
               <div id="confirmPinArea" hidden>
-                <div>Confirm New PIN</div>
+                <div data-l10n-id="confirmNewSimPinMsg">
+                  Confirm New PIN
+                </div>
                 <div class="input-wrapper">
-                  <input name="confirmNewSimpin" type="number" size="8" maxlength="8" />
+                  <input name="confirmNewSimpin" type="number" x-inputmode="digits" size="8" maxlength="8" />
                   <input name="confirmNewSimpinVis" type="text" size="8" maxlength="8" />
                 </div>
               </div>
@@ -641,10 +643,10 @@
                     <div id="value-indicator-hover-time">:</div>
                     <div id="value-indicator-hover"></div>
                   </div>
-                  <div id="value-picker-hours" class="animation-on"></div>
-                  <div id="value-picker-minutes" class="animation-on"></div>
+                  <div id="value-picker-hours" class="value-picker animation-on"></div>
+                  <div id="value-picker-minutes" class="value-picker animation-on"></div>
                   <div id="right-picker-separator"></div>
-                  <div id="value-picker-hour24-state" class="animation-on"></div>
+                  <div id="value-picker-hour24-state" class="value-picker animation-on"></div>
                   <div id="picker-bar-gradient"></div>
                 </div>
               </div>
@@ -671,16 +673,13 @@
                     <div class="value-indicator-hover"></div>
                   </div>
                   <div class="value-picker-date-wrapper">
-                    <div class="value-picker-date animation-on"></div>
-                    <div class="value-picker-date animation-on"></div>
-                    <div class="value-picker-date animation-on"></div>
-                    <div class="value-picker-date animation-on"></div>
+                    <div class="value-picker value-picker-date animation-on"></div>
                   </div>
                   <div class="value-picker-month-wrapper">
-                    <div class="value-picker-month" class="animation-on"></div>
+                    <div class="value-picker value-picker-month" class="animation-on"></div>
                   </div>
                   <div class="value-picker-year-wrapper">
-                    <div class="value-picker-year" class="animation-on"></div>
+                    <div class="value-picker value-picker-year" class="animation-on"></div>
                   </div>
                   <div class="picker-bar-gradient"></div>
                 </div>
@@ -855,9 +854,9 @@
               <a role="button" href="#" data-key="7">7<span>PQRS<span></a>
               <a role="button" href="#" data-key="8">8<span>TUV<span></a>
               <a role="button" href="#" data-key="9">9<span>WXYZ<span></a>
-              <a role="button" href="#" data-key="e" data-l10n-id="emergency-call-button" class="lockscreen-passcode-pad-func last-row">Emergency Call</a>
+              <a role="button" href="#" data-key="e" class="lockscreen-passcode-pad-func last-row"><span data-l10n-id="emergency-call-button">Emergency Call</span></a>
               <a role="button" href="#" data-key="0" class="last-row">0</a>
-              <a role="button" href="#" data-key="c" data-l10n-id="cancel" class="lockscreen-passcode-pad-func last-row">Cancel</a>
+              <a role="button" href="#" data-key="c" class="lockscreen-passcode-pad-func last-row"><span data-l10n-id="cancel">Cancel</span></a>
               <a role="button" href="#" data-key="b" class="last-row">⌫</a>
             </div>
           </div>
@@ -922,22 +921,25 @@
         <div id="volume" class="vibration">
           <span class="vibration"></span>
           <span class="mute-state"></span>
-          <div class="active"></div>
-          <div class="active"></div>
-          <div class="active"></div>
-          <div class="active"></div>
-          <div class="active"></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
           <span class="volume"></span>
+          <section>
+            <div class="active"></div>
+            <div class="active"></div>
+            <div class="active"></div>
+            <div class="active"></div>
+            <div class="active"></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+          </section>
         </div>
       </div>
 

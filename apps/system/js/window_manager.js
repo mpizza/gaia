@@ -308,6 +308,18 @@ var WindowManager = (function() {
     setDisplayedApp(homescreen);
   });
 
+  // XXX: We couldn't avoid to stop inline activities
+  // when screen is turned off and lockscreen is enabled
+  // to avoid two cameras iframes are competing resources
+  // if the user opens a app to call camera activity and
+  // at the same time open camera app from lockscreen.
+
+  window.addEventListener('lock', function onScreenLocked() {
+    if (inlineActivityFrames.length) {
+      stopInlineActivity(true);
+    }
+  });
+
   windows.addEventListener('transitionend', function frameTransitionend(evt) {
     var prop = evt.propertyName;
     var frame = evt.target;
@@ -375,25 +387,12 @@ var WindowManager = (function() {
     }
 
     if (classList.contains('opening')) {
-      var onWindowReady = function() {
-        windowOpened(frame);
+      windowOpened(frame);
 
-        setTimeout(openCallback);
-        openCallback = null;
+      setTimeout(openCallback);
+      openCallback = null;
 
-        setOpenFrame(null);
-      };
-
-      // If this is a cold launch let's wait for the app to load first
-      var iframe = openFrame.firstChild;
-      if ('unpainted' in iframe.dataset) {
-        iframe.addEventListener('mozbrowserloadend', function on(e) {
-          iframe.removeEventListener('mozbrowserloadend', on);
-          onWindowReady();
-        });
-      } else {
-        onWindowReady();
-      }
+      setOpenFrame(null);
     } else if (classList.contains('closing')) {
       windowClosed(frame);
 
@@ -816,11 +815,6 @@ var WindowManager = (function() {
     evt.initCustomEvent('appwillclose', true, false, { origin: origin });
     closeFrame.dispatchEvent(evt);
 
-    if ('wrapper' in closeFrame.dataset) {
-      wrapperHeader.classList.remove('visible');
-      wrapperFooter.classList.remove('visible');
-    }
-
     transitionCloseCallback = function startClosingTransition() {
       // We have been canceled by another transition.
       if (!closeFrame || transitionCloseCallback != startClosingTransition)
@@ -832,6 +826,11 @@ var WindowManager = (function() {
       // Start the transition
       closeFrame.classList.add('closing');
       closeFrame.classList.remove('active');
+
+      if ('wrapper' in closeFrame.dataset) {
+        wrapperHeader.classList.remove('visible');
+        wrapperFooter.classList.remove('visible');
+      }
     };
 
     waitForNextPaint(homescreenFrame, transitionCloseCallback);
@@ -902,47 +901,6 @@ var WindowManager = (function() {
         callback(app);
       }
     };
-  }
-
-  // Hide current app
-  function hideCurrentApp(callback) {
-    if (displayedApp == null || displayedApp == homescreen)
-      return;
-
-    toggleHomescreen(true);
-    var frame = getAppFrame(displayedApp);
-    frame.classList.add('back');
-    frame.classList.remove('restored');
-    if (callback) {
-      frame.addEventListener('transitionend', function execCallback() {
-        frame.style.visibility = 'hidden';
-        frame.removeEventListener('transitionend', execCallback);
-        callback();
-      });
-    }
-  }
-
-  // If app parameter is passed,
-  // it means there's a specific app needs to be restored
-  // instead of current app
-  function restoreCurrentApp(app) {
-    if (app) {
-      // Restore app visibility immediately but don't open it.
-      var frame = getAppFrame(app);
-      frame.style.visibility = 'visible';
-      frame.classList.remove('back');
-    } else {
-      app = displayedApp;
-      toggleHomescreen(false);
-      var frame = getAppFrame(app);
-      frame.style.visibility = 'visible';
-      frame.classList.remove('back');
-      frame.classList.add('restored');
-      frame.addEventListener('transitionend', function removeRestored() {
-        frame.removeEventListener('transitionend', removeRestored);
-        frame.classList.remove('restored');
-      });
-    }
   }
 
   function toggleHomescreen(visible) {
@@ -1032,7 +990,8 @@ var WindowManager = (function() {
         var evt = document.createEvent('CustomEvent');
         evt.initCustomEvent('apploadtime', true, false, {
           time: parseInt(Date.now() - iframe.dataset.start),
-          type: (e.type == 'appopen') ? 'w' : 'c'
+          type: (e.type == 'appopen') ? 'w' : 'c',
+          src: iframe.src
         });
         iframe.dispatchEvent(evt);
       }, true);
@@ -1043,9 +1002,14 @@ var WindowManager = (function() {
       if (newApp == homescreen) {
         // relaunch homescreen
         openWindow(homescreen, callback);
-      } else if (callback) {
+      } else {
+        if (requireFullscreen(newApp)) {
+          screenElement.classList.add('fullscreen-app');
+        }
+
         // Just run the callback right away if it is not homescreen
-        callback();
+        if (callback)
+          callback();
       }
     }
     // Case 2: null --> app
@@ -1236,6 +1200,9 @@ var WindowManager = (function() {
       }
     }
 
+    var evt = document.createEvent('CustomEvent');
+    evt.initCustomEvent('activitywillopen', true, true, { origin: origin });
+
     // Create the <iframe mozbrowser mozapp> that hosts the app
     var frame = createFrame(null, origin, url, name, manifest, manifestURL);
     var iframe = frame.firstChild;
@@ -1250,12 +1217,25 @@ var WindowManager = (function() {
     // inline frame. With the name we can get frames of the same app using the
     // window.open method.
     iframe.name = 'inline';
+    iframe.dataset.start = Date.now();
 
     // Save the reference
     inlineActivityFrames.push(frame);
 
     // Set the size
     setInlineActivityFrameSize();
+
+    frame.addEventListener('mozbrowserloadend', function activityloaded(e) {
+      e.target.removeEventListener(e.type, activityloaded, true);
+
+      var evt = document.createEvent('CustomEvent');
+      evt.initCustomEvent('activityloadtime', true, false, {
+        time: parseInt(Date.now() - iframe.dataset.start),
+        type: 'c', // Activity is always cold booted now.
+        src: iframe.src
+      });
+      iframe.dispatchEvent(evt);
+    }, true);
 
     // Add the iframe to the document
     windows.appendChild(frame);
@@ -1363,7 +1343,7 @@ var WindowManager = (function() {
     if (e.detail.type == 'activity-done') {
       // Remove the top most frame every time we get an 'activity-done' event.
       stopInlineActivity();
-      if (!inlineActivityFrames.length) {
+      if (!inlineActivityFrames.length && !activityCallerOrigin) {
         setDisplayedApp(activityCallerOrigin);
         activityCallerOrigin = '';
       }
@@ -2007,6 +1987,11 @@ var WindowManager = (function() {
     }
 
     if (displayedApp !== homescreen || inTransition) {
+      // Make sure this happens before activity frame is removed.
+      // Because we will be asked by a 'activity-done' event from gecko
+      // to relaunch to activity caller, and this is the only way to
+      // determine if we are going to homescreen or the original app.
+      activityCallerOrigin = '';
       setDisplayedApp(homescreen);
     } else {
       stopInlineActivity(true);
@@ -2064,8 +2049,7 @@ var WindowManager = (function() {
     getCurrentDisplayedApp: function() {
       return runningApps[displayedApp];
     },
-    hideCurrentApp: hideCurrentApp,
-    restoreCurrentApp: restoreCurrentApp,
+    toggleHomescreen: toggleHomescreen,
     retrieveHomescreen: retrieveHomescreen,
     screenshots: screenshots
   };

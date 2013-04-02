@@ -62,23 +62,24 @@ GAIA_DOMAIN=thisdomaindoesnotexist.org
 GAIA_APP_SRCDIRS=apps showcase_apps
 else ifeq ($(MAKECMDGOALS), dogfood)
 DOGFOOD=1
-PRODUCTION=1
-GAIA_OPTIMIZE=1
-B2G_SYSTEM_APPS=1
 else ifeq ($(MAKECMDGOALS), production)
 PRODUCTION=1
-GAIA_OPTIMIZE=1
-B2G_SYSTEM_APPS=1
+endif
+
+ifeq ($(DOGFOOD), 1)
+PRODUCTION=1
 endif
 
 # PRODUCTION is also set for user and userdebug B2G builds
 ifeq ($(PRODUCTION), 1)
+GAIA_OPTIMIZE=1
+B2G_SYSTEM_APPS=1
 GAIA_APP_SRCDIRS=apps
 ADB_REMOUNT=1
 endif
 
-ifeq ($(MAKECMDGOALS), dogfood)
-GAIA_APP_SRCDIRS=apps dogfood_apps
+ifeq ($(DOGFOOD), 1)
+GAIA_APP_SRCDIRS+=dogfood_apps
 endif
 
 ifeq ($(B2G_SYSTEM_APPS), 1)
@@ -147,12 +148,23 @@ SEP=\\
 MSYS_FIX=/
 endif
 
+ifndef GAIA_DISTRIBUTION_DIR
+  GAIA_DISTRIBUTION_DIR := $(CURDIR)$(SEP)distribution
+else
+	ifneq (,$(findstring MINGW32_,$(SYS)))
+		GAIA_DISTRIBUTION_DIR := $(join \
+			$(filter %:,$(subst :,: ,$GAIA_DISTRIBUTION_DIR)),\
+			$(realpath $(filter-out %:,$(subst :,: ,$GAIA_DISTRIBUTION_DIR))))
+	else
+		GAIA_DISTRIBUTION_DIR := $(realpath $(GAIA_DISTRIBUTION_DIR))
+	endif
+endif
 
 SETTINGS_PATH := build/custom-settings.json
-ifdef CUSTOMIZE
-	CUSTOMIZE_SETTINGS := $(realpath $(CUSTOMIZE))$(SEP)settings.json
-	ifneq ($(wildcard $(CUSTOMIZE_SETTINGS)),)
-		SETTINGS_PATH := $(CUSTOMIZE_SETTINGS)
+ifdef GAIA_DISTRIBUTION_DIR
+	DISTRIBUTION_SETTINGS := $(realpath $(GAIA_DISTRIBUTION_DIR))$(SEP)settings.json
+	ifneq ($(wildcard $(DISTRIBUTION_SETTINGS)),)
+		SETTINGS_PATH := $(DISTRIBUTION_SETTINGS)
 	endif
 endif
 
@@ -289,58 +301,22 @@ offline: webapp-manifests webapp-optimize webapp-zip optimize-clean
 # Create a light reference workload
 .PHONY: reference-workload-light
 reference-workload-light:
-	@echo "Populate Databases - Light Workload"
-	$(ADB) shell stop b2g
-	test_media/reference-workload/generateImages.sh 20
-	test_media/reference-workload/generateMusicFiles.sh 20
-	test_media/reference-workload/generateVideos.sh 5
-	$(ADB) push  test_media/reference-workload/contactsDb-200.sqlite /data/local/indexedDB/chrome/3406066227csotncta.sqlite
-	$(ADB) push  test_media/reference-workload/smsDb-200.sqlite /data/local/indexedDB/chrome/226660312ssm.sqlite
-	$(ADB) push  test_media/reference-workload/dialerDb-50.sqlite /data/local/indexedDB/15+f+app+++communications.gaiamobile.org/2584670174dsitanleecreR.sqlite
-	$(ADB) shell start b2g
-	@echo "Done"
+	test_media/reference-workload/makeReferenceWorkload.sh light
 
 # Create a medium reference workload
 .PHONY: reference-workload-medium
 reference-workload-medium:
-	@echo "Populate Databases - Medium Workload"
-	$(ADB) shell stop b2g
-	test_media/reference-workload/generateImages.sh 50
-	test_media/reference-workload/generateMusicFiles.sh 50
-	test_media/reference-workload/generateVideos.sh 10
-	$(ADB) push  test_media/reference-workload/contactsDb-500.sqlite /data/local/indexedDB/chrome/3406066227csotncta.sqlite
-	$(ADB) push  test_media/reference-workload/smsDb-500.sqlite /data/local/indexedDB/chrome/226660312ssm.sqlite
-	$(ADB) push  test_media/reference-workload/dialerDb-100.sqlite /data/local/indexedDB/15+f+app+++communications.gaiamobile.org/2584670174dsitanleecreR.sqlite
-	$(ADB) shell start b2g
-	@echo "Done"
+	test_media/reference-workload/makeReferenceWorkload.sh medium
 
 # Create a heavy reference workload
 .PHONY: reference-workload-heavy
 reference-workload-heavy:
-	@echo "Populate Databases - Heavy Workload"
-	$(ADB) shell stop b2g
-	test_media/reference-workload/generateImages.sh 100
-	test_media/reference-workload/generateMusicFiles.sh 100
-	test_media/reference-workload/generateVideos.sh 20
-	$(ADB) push  test_media/reference-workload/contactsDb-1000.sqlite /data/local/indexedDB/chrome/3406066227csotncta.sqlite
-	$(ADB) push  test_media/reference-workload/smsDb-1000.sqlite /data/local/indexedDB/chrome/226660312ssm.sqlite
-	$(ADB) push  test_media/reference-workload/dialerDb-200.sqlite /data/local/indexedDB/15+f+app+++communications.gaiamobile.org/2584670174dsitanleecreR.sqlite
-	$(ADB) shell start b2g
-	@echo "Done"
+	test_media/reference-workload/makeReferenceWorkload.sh heavy
 
 # Create an extra heavy reference workload
 .PHONY: reference-workload-x-heavy
 reference-workload-x-heavy:
-	@echo "Populate Databases - Extra Heavy Workload"
-	$(ADB) shell stop b2g
-	test_media/reference-workload/generateImages.sh 250
-	test_media/reference-workload/generateMusicFiles.sh 250
-	test_media/reference-workload/generateVideos.sh 50
-	$(ADB) push  test_media/reference-workload/contactsDb-2000.sqlite /data/local/indexedDB/chrome/3406066227csotncta.sqlite
-	$(ADB) push  test_media/reference-workload/smsDb-2000.sqlite /data/local/indexedDB/chrome/226660312ssm.sqlite
-	$(ADB) push  test_media/reference-workload/dialerDb-500.sqlite /data/local/indexedDB/15+f+app+++communications.gaiamobile.org/2584670174dsitanleecreR.sqlite
-	$(ADB) shell start b2g
-	@echo "Done"
+	test_media/reference-workload/makeReferenceWorkload.sh x-heavy
 
 
 # The install-xulrunner target arranges to get xulrunner downloaded and sets up
@@ -415,7 +391,7 @@ define run-js-command
 	const GAIA_DEFAULT_LOCALE = "$(GAIA_DEFAULT_LOCALE)";                       \
 	const GAIA_INLINE_LOCALES = "$(GAIA_INLINE_LOCALES)";                       \
 	const GAIA_ENGINE = "xpcshell";                                             \
-	const CUSTOMIZE = "$(realpath $(CUSTOMIZE))";      													\
+	const GAIA_DISTRIBUTION_DIR = "$(GAIA_DISTRIBUTION_DIR)";               	\
 	';                                                                          \
 	$(XULRUNNERSDK) $(XPCSHELLSDK) -e "$$JS_CONSTS" -f build/utils.js "build/$(strip $1).js"
 endef
@@ -425,6 +401,7 @@ endef
 # conflict, the result is undefined.
 EXTENDED_PREF_FILES = \
   custom-prefs.js \
+  gps-prefs.js \
   payment-prefs.js \
   ua-override-prefs.js \
 
@@ -681,12 +658,15 @@ update-offline-manifests:
 
 
 # If your gaia/ directory is a sub-directory of the B2G directory, then
-# you should use the install-gaia target of the B2G Makefile. But if you're
-# working on just gaia itself, and you already have B2G firmware on your
-# phone, and you have adb in your path, then you can use the install-gaia
-# target to update the gaia files and reboot b2g
+# you should use:
+#
+#  BUILD_APP_NAME=app-name ./flash.sh gaia
+#
+# But if you're working on just gaia itself, and you already have B2G firmware
+# on your phone, and you have adb in your path, then you can use the
+# install-gaia target to update the gaia files and reboot b2g
 TARGET_FOLDER = webapps/$(BUILD_APP_NAME).$(GAIA_DOMAIN)
-APP_NAME = $(shell cat apps/${BUILD_APP_NAME}/manifest.webapp | grep name | head -1 | cut -d '"' -f 4)
+APP_NAME = $(shell cat *apps/${BUILD_APP_NAME}/manifest.webapp | grep name | head -1 | cut -d '"' -f 4 | cut -b 1-15)
 APP_PID = $(shell adb shell b2g-ps | grep '^${APP_NAME}' | sed 's/^${APP_NAME}\s*//' | awk '{ print $$2 }')
 install-gaia: profile
 	$(ADB) start-server
@@ -748,13 +728,14 @@ reset-gaia: purge install-gaia install-settings-defaults
 # remove the memories and apps on the phone
 purge:
 	$(ADB) shell stop b2g
-	@(for FILE in `$(ADB) shell ls $(MSYS_FIX)/data/local | tr -d '\r'`; \
+	(for FILE in `$(ADB) shell ls $(MSYS_FIX)/data/local | tr -d '\r'`; \
 	do \
-		[ $$FILE != 'tmp' ] && $(ADB) shell rm -r $(MSYS_FIX)/data/local/$$FILE; \
+		[ $$FILE = 'tmp' ] || $(ADB) shell rm -r $(MSYS_FIX)/data/local/$$FILE; \
 	done);
 	$(ADB) shell rm -r $(MSYS_FIX)/cache/*
 	$(ADB) shell rm -r $(MSYS_FIX)/data/b2g/*
-	$(ADB) shell rm -r $(MSYS_FIX)$(GAIA_INSTALL_PARENT)/webapps
+	$(ADB) shell rm -r $(MSYS_FIX)/data/local/webapps
+	$(ADB) shell rm -r $(MSYS_FIX)/system/b2g/webapps
 
 # Build the settings.json file from settings.py
 ifeq ($(NOFTU), 1)

@@ -159,6 +159,7 @@ var touchEventsPresent = false;
 var touchedKeys = {};
 var touchCount = 0;
 var currentInputType = null;
+var currentInputMode = null;
 var menuLockedArea = null;
 
 // Show accent char menu (if there is one) after ACCENT_CHAR_MENU_TIMEOUT
@@ -188,7 +189,8 @@ const keyboardGroups = {
   'dvorak': ['en-Dvorak'],
   'spanish' : ['es'],
   'portuguese' : ['pt_BR'],
-  'otherlatins': ['cz', 'fr', 'de', 'nb', 'sk', 'tr', 'es', 'pt_BR'],
+  'polish' : ['pl'],
+  'otherlatins': ['cz', 'fr', 'de', 'nb', 'sk', 'tr'],
   'cyrillic': ['ru', 'sr-Cyrl'],
   'hebrew': ['he'],
   'zhuyin': ['zh-Hant-Zhuyin'],
@@ -522,8 +524,11 @@ function modifyLayout(keyboardName) {
   }
 
   var altLayoutName;
-  if (currentInputType === 'number' || currentInputType === 'tel')
+  if (currentInputType === 'tel')
     altLayoutName = currentInputType + 'Layout';
+  else if (currentInputType === 'number')
+    altLayoutName =
+      currentInputMode === 'digits' ? 'pinLayout' : 'numberLayout';
   else if (layoutPage === LAYOUT_PAGE_SYMBOLS_I)
     altLayoutName = 'alternateLayout';
   else if (layoutPage === LAYOUT_PAGE_SYMBOLS_II)
@@ -1399,6 +1404,7 @@ function showKeyboard(state) {
 
   IMERender.showIME();
 
+  currentInputMode = state.inputmode;
   currentInputType = mapInputType(state.type);
   resetKeyboard();
 

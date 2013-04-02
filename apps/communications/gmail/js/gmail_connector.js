@@ -12,10 +12,15 @@ var GmailConnector = (function GmailConnector() {
   // force a huge number of contacts to not paginate :S
   var END_POINT =
     'https://www.google.com/m8/feeds/contacts/default/full/?max-results=10000';
+  var GROUPS_END_POINT =
+    'https://www.google.com/m8/feeds/groups/default/full/';
   var EXTRA_HEADERS = {
     'GData-Version': '3.0'
   };
   var GD_NAMESPACE = 'http://schemas.google.com/g/2005';
+
+  var CATEGORY = 'gmail';
+  var URN_IDENTIFIER = 'urn:service:gmail:uid:';
 
   // Will be used as a cache for the thumbnail url for each contact
   var photoUrls = {};
@@ -35,20 +40,6 @@ var GmailConnector = (function GmailConnector() {
       contacts.push(gContactToJson(entries[i]));
     }
 
-    contacts.sort(function sortGoogleContacts(a, b) {
-      var out = 0;
-      if (a.familyName && b.familyName &&
-        a.familyName.length > 0 && b.familyName.length > 0) {
-        out = a.familyName[0].localeCompare(b.familyName[0]);
-      } else if (b.familyName && b.familyName.length > 0) {
-        out = 1;
-      } else if (a.familyName && a.familyName.length > 0) {
-        out = -1;
-      }
-
-      return out;
-    });
-
     return contacts;
   };
 
@@ -66,6 +57,38 @@ var GmailConnector = (function GmailConnector() {
     // Copy the access_token
     accessToken = access_token;
     photoUrls = {};
+    getContactsGroup(access_token, callbacks);
+  };
+
+  var getContactsGroup = function getContactsGroup(access_token,
+    callbacks) {
+    var groupCallbacks = {
+      success: function onSuccess(response) {
+        // Locate the entry witch systemGroup id is 'Contacts'
+        var feed = response.querySelector('feed');
+        if (feed === null) {
+          callbacks.error();
+          return;
+        }
+
+        var sgc = feed.querySelector('systemGroup[id="Contacts"]');
+        if (sgc !== null) {
+           var id = sgc.parentNode.querySelector('id').textContent;
+           getContactsByGroup(id, access_token, callbacks);
+        } else {
+           callbacks.error();
+        }
+      },
+      error: callbacks.error,
+      timeout: callbacks.timeout
+    };
+
+    return performAPIRequest(GROUPS_END_POINT, groupCallbacks, access_token);
+  };
+
+  // Retrieve all the contacts for the specific groupId
+  var getContactsByGroup = function getContactsByGroup(groupId, access_token,
+    callbacks) {
     var listingCallbacks = {
       success: function onSuccess(response) {
         callbacks.success({
@@ -76,21 +99,47 @@ var GmailConnector = (function GmailConnector() {
       timeout: callbacks.timeout
     };
 
-    return Rest.get(END_POINT, listingCallbacks,
-      {'requestHeaders': buildRequestHeaders(access_token),
-       'responseType': 'xml'});
+    var groupUrl = END_POINT + '&group=' + groupId;
+    return performAPIRequest(groupUrl, listingCallbacks, access_token);
   };
 
+  // Given a Google contacts api url add the authentication and
+  // extra headers to perform the correct request
+  var performAPIRequest = function performAPIRequest(url, callbacks,
+    access_token) {
+    return Rest.get(url, callbacks, {
+      'requestHeaders': buildRequestHeaders(access_token),
+      'responseType': 'xml'
+    });
+  };
+
+  // Return the list of contacts on the device imported using this connector
   var listDeviceContacts = function listDeviceContacts(callbacks) {
-    callbacks.success([]);
+    var filterOptions = {
+      filterValue: CATEGORY,
+      filterOp: 'contains',
+      filterBy: ['category']
+    };
+
+    var req = navigator.mozContacts.find(filterOptions);
+    req.onsuccess = function() {
+      callbacks.success(req.result);
+    };
+    req.onerror = function onError() {
+      callbacks.success([]);
+    };
   };
 
   var getImporter = function getImporter(contactsList, access_token) {
     return new window.ContactsImporter(contactsList, access_token, this);
   };
 
-  var getCleaner = function getCleaner(contactsList, access_token) {
-    return null;
+  var cleanContacts = function cleanContacts(contactsList, mode, cb) {
+    var cleaner = new window.ContactsCleaner(contactsList);
+    window.setTimeout(cleaner.start, 0);
+    if (cb) {
+      cb(cleaner);
+    }
   };
 
   var getValueForNode = function getValueForNode(doc, name, def) {
@@ -214,7 +263,17 @@ var GmailConnector = (function GmailConnector() {
       output.note = [content.textContent];
     }
 
+    output.category = [CATEGORY];
+    output.url = [{
+      type: ['source'],
+      value: getContactURI(output)
+    }];
+
     return output;
+  };
+
+  var getContactURI = function getContactURI(contact) {
+    return URN_IDENTIFIER + contact.uid;
   };
 
   // This will be a full url like:
@@ -300,8 +359,39 @@ var GmailConnector = (function GmailConnector() {
     return phones;
   };
 
+  // Given a contact from the mozcontact api, fetch the Google Contacts
+  // identifier
   var getContactUid = function getContactUid(deviceContact) {
-    return '-1';
+    var out = -1;
+
+    var url = deviceContact.url;
+    if (Array.isArray(url)) {
+      var targetUrls = url.filter(function(aUrl) {
+        return Array.isArray(aUrl.type) &&
+          aUrl.type.indexOf('source') !== -1 &&
+          aUrl.value;
+      });
+
+      if (targetUrls[0]) {
+        out = resolveURI(targetUrls[0].value);
+      }
+    }
+
+    return out;
+  };
+
+  // From a contact URL, that we expect to be a URI
+  // return the google contact id if we find it on
+  // the uri, -1 otherwise
+  var resolveURI = function resolveURI(uri) {
+    if (uri && uri.indexOf(URN_IDENTIFIER) == 0) {
+      var output = uri.substr(URN_IDENTIFIER.length);
+      if (output && output.length > 0) {
+        return output;
+      }
+    }
+
+    return -1;
   };
 
   var downloadContactPicture = function downloadContactPicture(googleContact,
@@ -333,7 +423,7 @@ var GmailConnector = (function GmailConnector() {
     'listAllContacts': listAllContacts,
     'listDeviceContacts': listDeviceContacts,
     'getImporter': getImporter,
-    'getCleaner': getCleaner,
+    'cleanContacts': cleanContacts,
     'adaptDataForShowing': adaptDataForShowing,
     'adaptDataForSaving': adaptDataForSaving,
     'getContactUid': getContactUid,

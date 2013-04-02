@@ -249,6 +249,9 @@ var ScreenManager = {
         // notification.
         if (this._cpuWakeLock) {
           this.turnScreenOn();
+          // In case of user making an extra call, the attention screen
+          // may be hidden at top so we need to confirm it's shown again.
+          AttentionScreen.show();
 
           break;
         }
@@ -261,12 +264,13 @@ var ScreenManager = {
 
       case 'statechange':
         var call = evt.target;
-        if (call.state !== 'connected') {
+        if (call.state !== 'connected' && call.state !== 'alerting') {
           break;
         }
 
-        // The call is connected. Remove the statechange listener
-        // and enable the user proximity sensor.
+        // The call is connected (MT call) or alerting (MO call).
+        // Remove the statechange listener and enable the user proximity
+        // sensor.
         call.removeEventListener('statechange', this);
 
         this._cpuWakeLock = navigator.requestWakeLock('cpu');

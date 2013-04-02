@@ -37,6 +37,12 @@ var UIManager = {
     'confirm-newpin-input',
     'fake-confirm-newpin-input',
     'confirm-newpin-error',
+    // XCK Screen
+    'xckcode-screen',
+    'xck-label',
+    'xck-input',
+    'fake-xck-input',
+    'xck-error',
     // Import contacts
     'sim-import-button',
     'no-sim',
@@ -62,7 +68,6 @@ var UIManager = {
     'offline-error-dialog',
     // Browser privacy newsletter subscription
     'newsletter-form',
-    'newsletter-button',
     'newsletter-input',
     'newsletter-success-screen',
     'offline-newsletter-error-dialog',
@@ -90,6 +95,8 @@ var UIManager = {
                                           this.fakeInputValues.bind(this));
     this.fakeConfirmNewpinInput.addEventListener('keypress',
                                               this.fakeInputValues.bind(this));
+    this.fakeXckInput.addEventListener('keypress',
+                                       this.fakeInputValues.bind(this));
 
     this.simImportButton.addEventListener('click', this);
     this.skipPinButton.addEventListener('click', this);
@@ -131,31 +138,18 @@ var UIManager = {
         if (err.desc.indexOf('email address') > -1) {
           this.invalidEmailErrorDialog.classList.add('visible');
         } else {
-          // Display 'no connection' dialog on error
-          this.offlineNewsletterErrorDialog.classList.add('visible');
+          // Store locally
+          Basket.store(this.newsletterInput.value, function stored() {
+            UIManager.newsletterSuccessScreen.classList.add('visible');
+          });
         }
-
         return;
       }
+      // if properly sent, remove stored email (in case of any)
+      window.asyncStorage.removeItem('newsletter_email');
       this.newsletterForm.classList.add('hidden');
       this.newsletterSuccessScreen.classList.add('visible');
     };
-
-    this.newsletterButton.addEventListener('click', function() {
-        if (WifiManager.isConnected || DataMobile.isDataAvailable) {
-          if (
-            this.newsletterInput.checkValidity() &&
-            this.newsletterInput.value.length > 0
-          ) {
-            utils.overlay.show(_('email-loading'), 'spinner');
-            Basket.send(this.newsletterInput.value, basketCallback.bind(this));
-          } else {
-            this.invalidEmailErrorDialog.classList.add('visible');
-          }
-        } else {
-          this.offlineNewsletterErrorDialog.classList.add('visible');
-        }
-    }.bind(this));
 
     this.offlineNewsletterErrorDialog
       .querySelector('button')
@@ -186,6 +180,55 @@ var UIManager = {
     var button = this.offlineErrorDialog.querySelector('button');
     button.addEventListener('click',
                             this.onOfflineDialogButtonClick.bind(this));
+  },
+
+  sendNewsletter: function ui_sendNewsletter(callback) {
+    var self = this;
+    var emailValue = self.newsletterInput.value;
+    if (emailValue == '') {
+      return callback(true);
+    } else {
+      utils.overlay.show(_('email-loading'), 'spinner');
+      if (self.newsletterInput.checkValidity()) {
+        if (window.navigator.onLine) {
+          Basket.send(emailValue, function emailSent(err, data) {
+            if (err) {
+              if (err.desc && err.desc.indexOf('email address') > -1) {
+                ConfirmDialog.show(_('invalid-email-dialog-title'),
+                                   _('invalid-email-dialog-text'),
+                                   {
+                                    title: _('cancel'),
+                                    callback: function ok() {
+                                      ConfirmDialog.hide();
+                                    }
+                                   });
+                utils.overlay.hide();
+                return callback(false);
+              } else {
+                Basket.store(emailValue);
+              }
+            }
+            utils.overlay.hide();
+            return callback(true);
+          });
+        } else {
+          Basket.store(emailValue);
+          utils.overlay.hide();
+          return callback(true);
+        }
+      } else {
+        utils.overlay.hide();
+        ConfirmDialog.show(_('invalid-email-dialog-title'),
+                           _('invalid-email-dialog-text'),
+                           {
+                            title: _('cancel'),
+                            callback: function ok() {
+                              ConfirmDialog.hide();
+                            }
+                           });
+        return callback(false);
+      }
+    }
   },
 
   initTZ: function ui_initTZ() {

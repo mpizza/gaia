@@ -27,8 +27,7 @@ require('/tests/js/integration_helper.js');
       // we add 1s to this value to give a little more time to the background
       // task to finish the preloading
       spawnInterval: 6000,
-      runs: 5,
-      eventTitles: {}
+      runs: window.mozTestInfo.runs
     };
 
     // overwrite values from the user
@@ -57,7 +56,7 @@ require('/tests/js/integration_helper.js');
         '  w.removeEventListener("apploadtime", w.onapplicationloaded);' +
         '}' +
         'w.onapplicationloaded = function(e) {' +
-        '  w.loadTimes.push(e.detail.time);' +
+        '  w.loadTimes.push(e.detail);' +
         '};' +
         'w.addEventListener("apploadtime", w.onapplicationloaded);';
 
@@ -109,21 +108,113 @@ require('/tests/js/integration_helper.js');
 
     finish: function() {
       for (var name in this.results) {
-        var title = this.opts.eventTitles[name] || name;
-        PerformanceHelper.reportDuration(this.results[name], title);
+        PerformanceHelper.reportDuration(this.results[name], name);
       }
     },
 
-    delay: function() {
-      IntegrationHelper.delay(this.app.device, this.opts.spawnInterval);
+    /**
+     * Runs a generator as a "task" .runs number
+     * of times with a delay between each task.
+     *
+     *    yield perf.repeatWithDelay(function(app, next) {
+     *      yield app.launch();
+     *      yield app.close();
+     *    });
+     *
+     */
+    repeatWithDelay: function(generator, callback) {
+      callback = callback || this.app.defaultCallback;
+
+      var pending = this.runs;
+
+      function nextTask(err) {
+        if (err) {
+          return callback(err);
+        }
+
+        if (!--pending) {
+          callback();
+        } else {
+          trigger();
+        }
+      }
+
+      var self = this;
+      function trigger() {
+        self.delay(function() {
+          self.task(generator, nextTask);
+        });
+      }
+
+      trigger();
     },
 
-    observe: function() {
+    /**
+     * Almost identical to app.task but generators
+     * do not take a done parameter and will close when
+     * execution completes.
+     *
+     *
+     *    yield perf.task(function(app, next) {
+     *      yield app.something();
+     *    });
+     *
+     */
+    task: function(generator, callback) {
+      var app = this.app;
+      callback = (callback || app.defaultCallback);
+      var instance;
+
+      function singleTaskNext(err, value) {
+        if (err && !(err instanceof StopIteration)) {
+          try {
+            instance.throw(err);
+          } catch (e) {
+            callback(e, null);
+            instance.close();
+          }
+        } else {
+          try {
+            instance.send(value);
+          } catch (e) {
+            if (!(e instanceof StopIteration)) {
+              callback(e);
+            }
+            callback();
+          }
+        }
+      }
+
+      // ugly but awesome hack
+      // this is how we can switch
+      // generators in .task
+      var appInstance = Object.create(app);
+      appInstance.defaultCallback = singleTaskNext;
+      appInstance.device = Object.create(app.device);
+      appInstance.device.defaultCallback = singleTaskNext;
+
+      try {
+        var instance = generator.call(this, appInstance, singleTaskNext);
+        instance.next();
+      } catch (e) {
+        callback(e);
+      }
+    },
+
+    delay: function(callback) {
+      IntegrationHelper.delay(
+        this.app.device,
+        this.opts.spawnInterval,
+        callback
+      );
+    },
+
+    observe: function(callback) {
       if (! this.opts.lastEvent) {
         var errMsg = 'the "lastEvent" property msut be configured.';
         throw new Error('PerformanceHelper: ' + errMsg);
       }
-      return this.app.observePerfEvents(this.opts.lastEvent);
+      return this.app.observePerfEvents(this.opts.lastEvent, callback);
     }
   };
 

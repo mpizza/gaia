@@ -1,10 +1,20 @@
 'use strict';
 
 requireApp('sms/test/unit/mock_contact.js');
+requireApp('sms/test/unit/mock_l10n.js');
 requireApp('sms/js/utils.js');
 
-
 suite('Utils', function() {
+  var nativeMozL10n = navigator.mozL10n;
+
+  suiteSetup(function() {
+    navigator.mozL10n = MockL10n;
+  });
+
+  suiteTeardown(function() {
+    navigator.mozL10n = nativeMozL10n;
+  });
+
   suite('Utils.escapeHTML', function() {
 
     test('valid', function() {
@@ -174,6 +184,29 @@ suite('Utils', function() {
         // Restore the name
         contact.name[0] = name;
       });
+    });
+  });
+
+  suite('Utils for MMS user story test', function() {
+    test('Image rescaling to 300kB', function() {
+      // Open test image for testing image resize ability
+      function resizeTest(name) {
+        var req = new XMLHttpRequest();
+        req.open('GET' , '/test/unit/media/' + name, true);
+        req.responseType = 'blob';
+
+        req.onreadystatechange = function() {
+          if (req.readyState === 4 && req.status === 200) {
+            var blob = req.response;
+            var limit = 300 * 1024;
+            Utils.getResizedImgBlob(blob, function(resizedBlob) {
+              assert.isTrue(resizedBlob.size < limit);
+            }, limit);
+          }
+        };
+        req.send(null);
+      }
+      resizeTest('IMG_0554.jpg');
     });
   });
 });
