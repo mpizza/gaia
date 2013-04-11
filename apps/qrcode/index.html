@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <title>Camera</title>
+    <link rel="resource" type="application/l10n" href="locales/locales.ini" />
+    <link rel="resource" type="application/l10n" href="/shared/locales/date.ini" />
+    <link type="text/css" rel="stylesheet" href="style/camera.css"/>
+
+    <script defer src="/shared/js/l10n.js"></script>
+    <!-- The following scripts are lazy loaded but left here to ensure
+         they get copied over from shared during the build -->
+    <!-- <script defer src="/shared/js/async_storage.js"></script> -->
+    <!-- <script defer src="/shared/js/blobview.js"></script> -->
+    <!-- <script defer src="/shared/js/media/jpeg_metadata_parser.js"></script> -->
+    <!-- <script defer src="/shared/js/media/get_video_rotation.js"></script> -->
+    <!-- <script defer src="/shared/js/media/video_player.js"></script> -->
+    <!-- <script defer src="/shared/js/media/media_frame.js"></script> -->
+    <!-- <script defer src="/shared/js/gesture_detector.js"></script> -->
+    <script defer src="/shared/js/lazy_loader.js" type="text/javascript"></script>
+    <script defer src="js/grid.js"></script>
+    <script defer src="js/version.js"></script>
+    <script defer src="js/detector.js"></script>
+    <script defer src="js/formatinf.js"></script>
+    <script defer src="js/errorlevel.js"></script>
+    <script defer src="js/bitmat.js"></script>
+    <script defer src="js/datablock.js"></script>
+    <script defer src="js/bmparser.js"></script>
+    <script defer src="js/datamask.js"></script>
+    <script defer src="js/rsdecoder.js"></script>
+    <script defer src="js/gf256poly.js"></script>
+    <script defer src="js/gf256.js"></script>
+    <script defer src="js/decoder.js"></script>
+    <script defer src="js/qrcode.js"></script>
+    <script defer src="js/findpat.js"></script>
+    <script defer src="js/alignpat.js"></script>
+    <script defer src="js/databr.js"></script>
+    <script defer src="js/clone.js" type="text/javascript"></script>
+    <script defer src="js/camera.js" type="text/javascript"></script>
+    
+  </head>
+  <body>
+    <div id="focus-ring"></div>
+    <video id="viewfinder" autoplay></video>
+    <canvas id="viewcanvas"></canvas>
+    <div id="image_reg"></div>
+    <div id="hud">
+      <a id="toggle-camera" class="hidden"></an>
+      <a id="toggle-flash" class="hidden"></a>
+    </div>
+
+    <div id="controls">
+      <a id="switch-button" name="Switch source" class="hidden" disabled="disabled"><span></span></a>
+      <a id="capture-button" name="Capture" disabled="disabled"><span></span></a>
+      <div id="misc-button">
+        <a id="gallery-button" class="hidden" name="View Gallery"><span></span></a>
+        <a id="cancel-pick" class="hidden"><span></span></a>
+        <span id="video-timer">00:00</span>
+      </div>
+    </div>
+
+    <div id="overlay" class="hidden">
+      <div id="overlay-content">
+        <h1 id="overlay-title"></h1>
+        <p id="overlay-text"><p>
+      </div>
+    </div>
+
+    <!-- see filmstrip.js and filmstrip.css for these elements -->
+    <div id="filmstrip" class="hidden">
+    </div>
+    <div id="preview" class="offscreen">
+      <div id="frame-container">     <!-- media frame rotates inside this -->
+        <div id="media-frame"></div> <!-- image or video here -->
+      </div>
+      <footer id="preview-controls"> <!-- camera, delete, share buttons -->
+        <a id="camera-button" class="button"></a>
+        <a id="delete-button" class="button"></a>
+        <a id="share-button" class="button"></a>
+      </footer>
+    </div>
+
+  </body>
+</html>
