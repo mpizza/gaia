@@ -54,7 +54,7 @@
   },
   "default_locale": "en-US",
   "icons": {
-    "120": "/style/icons/Camera.png",
-    "60": "/style/icons/60/Camera.png"
+    "120": "/style/icons/QRcode.png",
+    "60": "/style/icons/60/QRcode.png"
   }
 }

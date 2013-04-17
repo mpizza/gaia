@@ -1,22 +1,19 @@
 /*
- Ported to web app by Gary Chen 2012
- 
- gchen@mozilla.com.
-*/
-/*
-   Copyright 2011 Lazar Laszlo (lazarsoft@gmail.com, www.lazarsoft.info)
-   
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+  This file is modified by PoYu Chen(Gary Chen, gchen@mozilla.com, http://github.com/mpizza/gaia) on 2013.
+  
+  Copyright 2011 Lazar Laszlo (lazarsoft@gmail.com, www.lazarsoft.info)
 
-       http://www.apache.org/licenses/LICENSE-2.0
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+   http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 */
 
 
@@ -33,78 +30,77 @@ qrcode.ctx = null;
 qrcode.sizeOfDataLengthInfo =  [  [ 10, 9, 8, 8 ],  [ 12, 11, 16, 10 ],  [ 14, 13, 16, 12 ] ];
 
 qrcode.callback = null;
-
+qrcode.unlock = false; 
 qrcode.decode = function(src) {
-  console.log("docode");
-  //var canvas_qr = document.getElementById("viewcanvas");
-  //var context = canvas_qr.getContext('2d'); // qrcode.ctx;
-  // var canvas_qr = qrcode.canvas;
-  // var context = qrcode.ctx; // qrcode.ctx;
 		
 	if(arguments.length == 0) { // use camera
 		qrcode.width = qrcode.canvas.width;
 		qrcode.height = qrcode.canvas.height;
 		qrcode.imagedata = qrcode.ctx.getImageData(0, 0, qrcode.width, qrcode.height);
+
     try {
 				qrcode.result = qrcode.process(qrcode.ctx);
 				if(qrcode.callback != null) {
 				 	qrcode.callback(qrcode.result);
 				}
-        console.log("qrcode result:"+qrcode.result);
+        //console.log("qrcode result:"+qrcode.result);
         //$('#result').append("result:"+qrcode.result+"<br/>");
 		}
 		catch(e) {
 				//do nothing 
 				//qrcode.result = "error decoding QR Code";
-        console.log("error decoding QR Code");
+        //console.log("error decoding QR Code");
+        qrcode.unlock = false;
 		}
 	} else { // use image
-		var image = new Image();
-		image.onload=function(){
-			//draw in out-canvas
-			var canvas_out = document.getElementById("out-canvas");
-			console.log(image.width+":"+image.height);
-			if(canvas_out!=null){
-				var outctx = canvas_out.getContext('2d');
-				outctx.clearRect(0, 0, canvas_out.width,canvas_out.height);
-				outctx.drawImage(image, 0, 0, image.width, image.height);
-			}
+		// var image = new Image();
+		// image.onload=function(){
+		// 	//draw in out-canvas
+		// 	var canvas_out = document.getElementById("out-canvas");
+		// 	console.log(image.width+":"+image.height);
+		// 	if(canvas_out!=null){
+		// 		var outctx = canvas_out.getContext('2d');
+		// 		outctx.clearRect(0, 0, canvas_out.width,canvas_out.height);
+		// 		outctx.drawImage(image, 0, 0, image.width, image.height);
+		// 	}
 			
-			qrcode.canvas.width = image.width+100;
-			qrcode.canvas.height = image.height+100;
-			qrcode.ctx.drawImage(image, 0, 0, image.width, image.height);
-			console.log("qr"+image.width+","+image.height);
-			qrcode.width = image.width;
-			qrcode.height = image.height;
-			try{
-				qrcode.imagedata = qrcode.ctx.getImageData(0, 0, image.width, image.height);
-			}catch(e){
-				qrcode.result = "Cross domain image reading not supported in your browser! Save it to your computer then drag and drop the file!";
-				if(qrcode.callback!=null)
-					qrcode.callback(qrcode.result);
-				return;
-			}
-			var start = new Date().getTime();
-			try{
-				qrcode.result = qrcode.process(qrcode.ctx);
-			}
-			catch(e){
-				console.log(e);
-				qrcode.result = "error decoding QR Code";
-			}
-			var end = new Date().getTime();
-			var time = end - start;
-			console.log(time);
+		// 	qrcode.canvas.width = image.width+100;
+		// 	qrcode.canvas.height = image.height+100;
+		// 	qrcode.ctx.drawImage(image, 0, 0, image.width, image.height);
+		// 	console.log("qr"+image.width+","+image.height);
+		// 	qrcode.width = image.width;
+		// 	qrcode.height = image.height;
+		// 	try{
+		// 		qrcode.imagedata = qrcode.ctx.getImageData(0, 0, image.width, image.height);
+		// 	}catch(e){
+		// 		qrcode.result = "Cross domain image reading not supported in your browser! Save it to your computer then drag and drop the file!";
+		// 		if(qrcode.callback!=null)
+		// 			qrcode.callback(qrcode.result);
+		// 		return;
+		// 	}
+		// 	var start = new Date().getTime();
+		// 	try{
+		// 		qrcode.result = qrcode.process(qrcode.ctx);
+		// 	}
+		// 	catch(e){
+		// 		console.log(e);
+		// 		qrcode.result = "error decoding QR Code";
+  //        qrcode.unlock = false;
+		// 	}
+		// 	var end = new Date().getTime();
+		// 	var time = end - start;
+		// 	console.log(time);
 			
-			if(qrcode.callback!=null)
-				qrcode.callback(qrcode.result);
-			}
+		// 	if(qrcode.callback!=null)
+		// 		qrcode.callback(qrcode.result);
+		// 	}
 			
-			image.src = src;
-	}// end else
+		// 	image.src = src;
+	}// end image
 }
 
 qrcode.process = function(ctx){
+  qrcode.unlock = true;
   var image = qrcode.grayScaleToBitmap(qrcode.grayscale());
   
   var detector = new Detector(image);
@@ -119,7 +115,7 @@ qrcode.process = function(ctx){
     for(var j=0;j<data[i].length;j++)
       str+=String.fromCharCode(data[i][j]);
   }
-  
+  qrcode.unlock = false;
   return str;
 }
 
@@ -213,16 +209,26 @@ qrcode.grayScaleToBitmap=function(grayScale){
 }
 
 qrcode.grayscale = function(){
+  var data_length = qrcode.imagedata.data.length;
   var ret = new Array(qrcode.width*qrcode.height);
-  for (var y = 0; y < qrcode.height; y++){
-    for (var x = 0; x < qrcode.width; x++){
-      var gray = qrcode.getPixel(x, y);
-      ret[x+y*qrcode.width] = gray;
-    }
+  var ret_index = 0;
+  for(var i = 0; i < data_length; i+=4) {
+    ret[ret_index] = (3*qrcode.imagedata.data[i]+4*qrcode.imagedata.data[i+1]+qrcode.imagedata.data[i+2])>>>3;
+    ret_index += 1;
   }
   return ret;
 }
 
+// qrcode.grayscale = function(){
+//   var ret = new Array(qrcode.width*qrcode.height);
+//   for (var y = 0; y < qrcode.height; y++){
+//     for (var x = 0; x < qrcode.width; x++){
+//       var gray = qrcode.getPixel(x, y);
+//       ret[x+y*qrcode.width] = gray;
+//     }
+//   }
+//   return ret;
+// }
 
 function URShift( number,  bits){
   if (number >= 0)

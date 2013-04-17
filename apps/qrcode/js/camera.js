@@ -621,19 +621,6 @@ var Camera = {
       Filmstrip.show();
   },
 
-  // initCanvas: function initCanvas_style(){
-  //   console.log('hi');
-  //   var decodeCanvas = this.decodeCanvas;
-  //   var c_style = decodeCanvas.style;
-  //   var viewfinder = this.viewfinder;
-  //   var v_style = viewfinder.style;
-  //   c_style = v_style.top;
-  //   c_style = v_style.left;
-  //   c_style = v_style.MozTransform;
-  //   c_style = v_style.width;
-  //   c_style = v_style.height;
-  // },
-
   loadCameraPreview: function camera_loadCameraPreview(camera, callback) {
 
     this.viewfinder.mozSrcObject = null;
@@ -1026,9 +1013,6 @@ var Camera = {
 };
 
 Camera.init();
-//setup canvas
-Canvas_pad.set_Canvas_style(Camera.camera);
-qrcode.run_num = window.setInterval(function(){Canvas_pad.copy_video()},30);
 
 document.addEventListener('mozvisibilitychange', function() {
   if (document.mozHidden) {

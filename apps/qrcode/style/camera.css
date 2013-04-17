@@ -12,29 +12,33 @@ html, body {
 #viewfinder {
   position: absolute;
   z-index: 25;
-  border:1px solid #f0f;
-  display:none;
 }
 
-#viewcanvas {
+#viewcanvas{
   position: absolute;
+  z-index: 15;
+}
+#viewcanvas.show{
   z-index: 35;
-  border:1px solid #f00;
 }
-#image_reg{
+#qr_result_box{
   position: absolute;
-  top:50px;
-  left:50px;
-  z-index: 45;
-  width:200px;
-  height:200px;
-  display:none;
-}
-#image_reg.show{
-  background:#fff;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  height: 90px;
+  background: rgba(255, 255, 255, 0.8);
   color:#000;
-  display:block;
+  width:100%;
+  overflow: hidden;
 }
+#qr_result_box.show{
+  z-index: 105;
+}
+#qr_result_box a{
+  font-size:16px;
+}
+
 #controls {
   position: absolute;
   bottom: 0;
@@ -44,6 +48,7 @@ html, body {
   z-index: 50;
   background-color: rgba(0, 0, 0, 0.8);
   overflow: hidden;
+  display:none;
 }
 
 #switch-button, #capture-button, #misc-button {
