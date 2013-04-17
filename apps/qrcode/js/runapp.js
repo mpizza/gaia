@@ -107,6 +107,7 @@ function init_canvas(evt){
   //setup canvas
   Canvas_pad.set_Canvas_style(Camera.camera);
   qrcode.run_num = window.setInterval(function(){
+    console.log('focused'+Camera.focusRing.dataset.state);
     if ( Camera.focusRing.dataset.state == 'focused' || Camera.focusRing.dataset.state == 'focusing' ){
       if(Camera.focusRing.dataset.state == 'focused'){
         Canvas_pad.copy_video();
@@ -130,8 +131,8 @@ Camera.autoFocusDone_qrcode = function autoFocusDone_qrcode(success){
   this.focusRing.setAttribute('data-state', 'focused');
 }
 
-Camera.viewfinder.addEventListener('click', Camera.hideFocusRing.bind(Camera));
-
+//Camera.viewfinder.addEventListener('click', Camera.hideFocusRing.bind(Camera));
+Camera.viewfinder.addEventListener('click', init_canvas, false);
 function init_qr_lib(){
   console.log('lazyload');
   var qr_loader = LazyLoader;
