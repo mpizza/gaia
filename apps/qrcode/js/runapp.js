@@ -103,7 +103,7 @@ init_qr_lib();
 Camera.viewfinder.addEventListener('playing', init_canvas, false);
 function init_canvas(evt){
   evt.target.removeEventListener('playing', init_canvas, false);
-  //console.log('viewfinder playing');
+  console.log('viewfinder playing');
   //setup canvas
   Canvas_pad.set_Canvas_style(Camera.camera);
   qrcode.run_num = window.setInterval(function(){
@@ -133,6 +133,7 @@ Camera.autoFocusDone_qrcode = function autoFocusDone_qrcode(success){
 Camera.viewfinder.addEventListener('click', Camera.hideFocusRing.bind(Camera));
 
 function init_qr_lib(){
+  console.log('lazyload');
   var qr_loader = LazyLoader;
   var qr_files = [
     'js/filmstrip.js',
@@ -157,6 +158,6 @@ function init_qr_lib(){
   ];
   qr_loader.load(qr_files, function() {
     self.delayedInit();
-    //console.log('lazyload');
+    console.log('lazyload');
   });
 }
