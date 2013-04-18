@@ -214,7 +214,6 @@ qrcode.grayscale = function(){
   var ret_index = 0;
   for(var i = 0; i < data_length; i+=4) {
     ret[ret_index] = (3*qrcode.imagedata.data[i]+4*qrcode.imagedata.data[i+1]+qrcode.imagedata.data[i+2])>>>3;
-    console.log('color'+ret[ret_index]);
     ret_index += 1;
   }
   return ret;

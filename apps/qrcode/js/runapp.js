@@ -131,8 +131,8 @@ Camera.autoFocusDone_qrcode = function autoFocusDone_qrcode(success){
   this.focusRing.setAttribute('data-state', 'focused');
 }
 
-//Camera.viewfinder.addEventListener('click', Camera.hideFocusRing.bind(Camera));
-Camera.viewfinder.addEventListener('click', init_canvas, false);
+Camera.viewfinder.addEventListener('click', Camera.hideFocusRing.bind(Camera));
+
 function init_qr_lib(){
   console.log('lazyload');
   var qr_loader = LazyLoader;
