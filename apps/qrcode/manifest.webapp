@@ -6,8 +6,8 @@
   "orientation": "portrait-primary",
   "fullscreen": true,
   "developer": {
-    "name": "The Gaia Team",
-    "url": "https://github.com/mozilla-b2g/gaia"
+    "name": "gary chen",
+    "url": "https://github.com/mpizza/gaia/"
   },
   "permissions": {
     "storage":{},
