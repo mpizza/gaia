@@ -335,7 +335,7 @@ a.button.disabled {
 }
 
 footer {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 1);
   height: 40px;
   position: absolute;
   bottom: 0;
