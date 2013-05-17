@@ -487,15 +487,21 @@ header .icon:after {
    For landscape mode here. Settings for portrait mode is written in
    media query at bottom */
 #videoBar {
-  background: url(images/scroll_bar_bg.png) rgba(0, 0, 0, 0.75) no-repeat 8.5rem center / auto 2rem;
+  background: rgba(0, 0, 0, 0.75);
   position: absolute;
   overflow: hidden;
   left: 0;
   right: 0;
-  bottom: 4.5rem;
-  height: 4.5rem;
+  bottom: 4rem;
+  height: 7rem;
   margin: 0;
   padding: 0;
+}
+
+@media (orientation: portrait) {
+  #videoBar {
+    background-size: 12.8rem 7rem;
+  }
 }
 
 #videoBar:last-child {
@@ -503,17 +509,17 @@ header .icon:after {
 }
 
 #play, #play:after {
-  width: 8rem;
-  height: 4.5rem;
+  width: 12rem;
+  height: 7rem;
 }
 
 #play {
-  background: url(images/button_bg_normal.png) no-repeat center center / 8rem;
+  background: url(images/button_bg_normal.png) no-repeat center center / 12rem 7rem;
   position: absolute;
   border: none;
   padding: 0;
   margin: 0;
-  left: 0.5rem;
+  left: 10rem;
   top: 0;
   z-index: 20;
 }
@@ -523,9 +529,9 @@ header .icon:after {
 }
 
 #play:after {
-  background-position: 2.3rem 0.8rem;
+  background-position: 4rem 1.5rem;
   background-repeat: no-repeat;
-  background-size: 3rem;
+  background-size: 4rem;
   content: " ";
   display: block;
   position: relative;
@@ -542,33 +548,37 @@ header .icon:after {
 
 /* time slider */
 #timeSlider {
+  background: url(images/scroll_bar_bg.png);
+  background-size: 12.8rem 2.4rem;
   position: absolute;
-  left: 8.5rem;
-  top: 0;
-  right: 0;
-  height: 100%;
+  left: 0;
+  top: 2.3rem;
+  width: 100%;
+  height: 2.4rem;
 }
 
 #timeSlider span {
   display: block;
-  width: 5.9rem;
+  width: 12rem;
   position: absolute;
-  color: #A1AFB2;
+  left: 25rem;
   height: 100%;
-  line-height: 4.6rem;
-  text-align: center;
-  font-size: 1.4rem;
+  line-height: 2.4rem;
+  text-align: left;
+  font-size: 2.1rem;
+  color: #f8b62d;
 }
 
-#duration-text {
-  right: 0;
+#timeSlider #duration-text {
+  left: 109rem;
+  color: #ffffff;
 }
 
 #slider-wrapper {
   position: absolute;
   top: 0;
-  left: 7rem;
-  right: 7rem;
+  left: 37rem;
+  width: 71rem;
   height: 100%;
 }
 
@@ -585,7 +595,7 @@ header .icon:after {
 }
 
 #elapsedTime {
-  background: url(images/timeline_filled.png) no-repeat left center / 25.5rem;
+  background: url(images/timeline_filled.png) no-repeat left center / 71rem 4rem;
   z-index: 30;
 }
 
@@ -595,14 +605,14 @@ header .icon:after {
 }
 
 #timeBackground {
-  background: url(images/timeline.png) repeat-x left top / 25.5rem;
+  background: url(images/timeline.png) repeat-x left top / 71rem 4rem;
   z-index: 10;
   width: 100%;
 }
 
 #playHead {
   -moz-transition: background 1s linear;
-  background: url(images/scrubber.png) no-repeat center center / 100%;
+  background: url(images/scrubber.png) no-repeat center center / 2.7rem 2.4rem;
   margin: -1.1rem 0 0 -1.2rem;
   position: absolute;
   pointer-events: none;
@@ -615,16 +625,16 @@ header .icon:after {
 }
 
 #playHead.active {
-  background: url(images/scrubber_pressed.png) no-repeat center center / 100%;
+  background: url(images/scrubber_pressed.png) no-repeat center center / auto 2.4rem;
   width: 8.1rem;
-  height: 4.5rem;
+  height: 2.4rem;
   margin: -1rem 0 0 -3.93rem;
   top: 1rem;
 }
 
 @media screen and (orientation: portrait) {
   #play, #play:after {
-    width: 5.6rem;
+    width: 14rem;
   }
 
   li.details {
@@ -632,26 +642,28 @@ header .icon:after {
   }
 
   #play {
-    background-image: url(images/portrait/button_bg_normal.png);
-    background-size: 5.6rem;
+    left: 0;
   }
-
-  #play:active {
-    background-image: url(images/portrait/button_bg_pressed.png);
-  }
-
   #play:after {
-    background-position: 1.1rem 0.8rem;
+    background-position: 5rem 1.5rem;
   }
-
   #timeSlider {
-    left: 6.1rem;
-  }
-
-  #videoBar {
     background-image: url(images/portrait/scroll_bar_bg.png);
-    background-position: 6.1rem center;
-    background-size: auto 2.1rem;
+    background-size: 8rem 2.4rem;
+  }
+  #timeSlider span {
+    width: 10rem;
+    left: 16rem;
+  }
+  #slider-wrapper {
+    width: 40rem;
+    left: 26rem;
+  }
+  #timeSlider #duration-text{
+    left: 66rem;
+  }
+  #elapsedTime, #timeBackground{
+    background-size: 40rem 4rem;
   }
 }
 
