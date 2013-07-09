@@ -1,0 +1,63 @@
+body {
+  font-family: "Open Sans", Sans-serif;
+  font-size: 1.8rem;
+  line-height: 2.2rem;
+  margin: 0;
+  padding: 0;
+}
+
+header {
+  background: #333;
+  color: white; 
+  font-size: 1.8rem;
+  line-height: 2.5rem;
+  padding: 5px 10px;
+  text-align: center;
+}
+
+ul,ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+ul li {
+  margin: 0 auto;
+  margin-top: 1rem;
+  width: 85%;
+  border-bottom: #eee solid 1px;
+  border-radius: 5px;
+}
+
+ul li:last-child {
+  border-bottom: none;
+}
+
+ul li.done {
+  background: #999;
+}
+ul li.done span {
+  text-decoration: line-through;
+}
+
+ul li input[type="text"] {
+  font-size: 1.8rem;
+  line-height: 2.5rem;
+  background: #eee;
+  width: 100%;
+}
+
+ul li input[type="checkbox"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 150%;
+}
+
+ul li div.add-more {
+  border: dashed 2px #333;
+  background: #eee;
+  color: #333;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+}

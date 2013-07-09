@@ -1,0 +1,23 @@
+{
+  "name": "ToDo List",
+  "description": "My To-do list",
+  "launch_path": "/index.html",
+  "developer": {
+    "name": "The Gaia Team",
+    "url": "https://github.com/mozilla-b2g/gaia"
+  },
+  "locales": {
+    "en-US": {
+      "name": "ToDo List",
+      "description": "My To-do list"
+    },
+    "zh-TW": {
+      "name": "ToDo List",
+      "description": "My To-do list"
+    }
+  },
+  "default_locale": "en-US",
+  "icons": {
+    "128": "/style/icons/todo.png"
+  }
+}
