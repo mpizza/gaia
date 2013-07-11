@@ -43,10 +43,24 @@ var Todo = {
     });
     var checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
+    
     var span = document.createElement('span');
     span.textContent = value;
+    
+    // for select user info from contact (web activity)
+    var assignButton = document.createElement('input');
+    assignButton.type = 'button';
+    assignButton.value = '+';
+    assignButton.classList.add('adduser');
+    
+    var assignList = document.createElement('ul'); // for assigned list
+    assignList.classList.add('assignList');
+
     li.appendChild(checkbox);
     li.appendChild(span);
+    li.appendChild(assignButton);
+    li.appendChild(assignList);
+
     checkbox.onclick = function() {
       if (this.checked) {
         li.classList.add('done');
@@ -55,9 +69,36 @@ var Todo = {
         li.classList.remove('done');
       }
     }
+
+    assignButton.addEventListener('click', pickUserContact.bind(assignList));
     this.addButton.hidden = false;
   }
 
 };
 
 window.addEventListener('load', Todo.init.bind(Todo));
+
+function pickUserContact() {
+  var assignList = this;
+  var activity = new MozActivity({
+    // Ask for the "pick" activity
+    name: 'pick',
+    // Provide de data required by the filters of the activity
+    data: {
+      type: 'webcontacts/contact'
+    }
+  });
+
+  activity.onsuccess = function() {
+    var name = this.result.name;
+    //var number = this.result.number; no use
+    var li = document.createElement('li');
+    li.textContent = name;
+    assignList.appendChild(li);
+  };
+
+  activity.onerror = function() {
+    console.log(this.error);
+  };
+
+}

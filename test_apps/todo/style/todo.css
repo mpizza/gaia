@@ -58,6 +58,33 @@ ul li div.add-more {
   background: #eee;
   color: #333;
   border-radius: 5px;
-  padding: 5px 10px;
+  padding: 5px;
   cursor: pointer;
+}
+
+li.done ul.assignList{
+  display: none;
+}
+li ul.assignList{
+  display: block;
+  font-size: 12px;
+}
+
+ul.assignList li{
+  margin-top: 10px;
+  padding-left: 10px;
+  width: auto;
+  background: #eee;
+  color: #333;
+  border-radius: 5px;
+}
+
+input.adduser{
+  text-indent: -999999px;
+  cursor: pointer;
+  border: 0px;
+  width: 32px;
+  height: 32px;
+  background: url('icons/persona-logo.png') no-repeat;
+  background-position: 3px -5px;
 }
