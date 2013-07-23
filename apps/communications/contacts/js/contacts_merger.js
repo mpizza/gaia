@@ -130,9 +130,11 @@ contacts.Merger = (function() {
 
     }); // matchingResults
 
-    var name = [(Array.isArray(recGivenName) ? recGivenName[0] : '') +
-                          ' ' +
-                (Array.isArray(recFamilyName) ? recFamilyName[0] : '')];
+
+    mergedContact.name = [(Array.isArray(recGivenName) && recGivenName[0] ?
+                           recGivenName[0] : '') + ' ' +
+                (Array.isArray(recFamilyName) && recFamilyName[0] ?
+                            recFamilyName[0] : '')];
 
     var fields = ['familyName', 'givenName', 'name', 'org', 'email', 'tel',
                   'bday', 'adr', 'category', 'url', 'note', 'photo'];
