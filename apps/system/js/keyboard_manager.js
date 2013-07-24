@@ -275,8 +275,10 @@ var KeyboardManager = {
           }, null);
         }, FOCUS_CHANGE_DELAY);
         break;
-      // if there is only one number, it should be update height
       default:
+        // if there is only one number, it should be update height
+        self.keyboardHeight = parseInt(keyword);
+
         var updateHeight = function km_updateHeight() {
           self.keyboardFrameContainer.removeEventListener(
               'transitionend', updateHeight);
@@ -288,7 +290,7 @@ var KeyboardManager = {
           // to do
           var detail = {
             'detail': {
-              'height': keyboardHeight
+              'height': self.keyboardHeight
             }
           };
           window.dispatchEvent(new CustomEvent('keyboardchange', detail));
@@ -312,8 +314,7 @@ var KeyboardManager = {
         break;
       case 'activitywillclose':
       case 'appwillclose':
-        window.dispatchEvent(new CustomEvent('keyboardhide'));
-        this.keyboardFrameContainer.classList.add('hide');
+        this.hideKeyboard();
         break;
       //XXX the following three cases haven't been tested.
       case 'mozbrowsererror': // OOM
@@ -399,6 +400,7 @@ var KeyboardManager = {
 
   hideKeyboard: function km_hideKeyboard() {
     this.resetShowingKeyboard();
+    this.keyboardHeight = 0;
     window.dispatchEvent(new CustomEvent('keyboardhide'));
     this.keyboardFrameContainer.classList.add('hide');
   }
