@@ -1,96 +1,107 @@
 {
-  "name": "Keyboard",
-  "description": "Gaia Keyboard",
+  "name": "Firefox OS Keyboard",
+  "description": "Firefox OS Keyboard",
   "type": "certified",
   "role": "keyboard",
+  "launch_path": "/index.html#settings",
   "developer": {
     "name": "The Gaia Team",
     "url": "https://github.com/mozilla-b2g/gaia"
   },
   "permissions": {
-    "settings":{ "access": "readwrite" },
-    "keyboard":{}
+    "settings": { "access": "readwrite" },
+    "keyboard": {}
   },
   "entry_points": {
     "English": {
       "launch_path": "/index.html#en",
       "description": "English layout",
-      "type": ["text"]
+      "type": ["url", "text"],
+      "locales": {
+        "en-US": {
+          "name": "English",
+          "description": "English layout"
+        },
+        "zh-TW": {
+          "name": "英文",
+          "description": "英文鍵盤"
+        }
+      }
     },
     "English (Dvorak)": {
       "launch_path": "/index.html#en-Dvorak",
       "description": "Dvorak layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Spanish": {
       "launch_path": "/index.html#es",
       "description": "Spanish layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Portuguese Brazilian": {
       "launch_path": "/index.html#pt-BR",
       "description": "Portuguese Brazilian layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Polish": {
       "launch_path": "/index.html#pl",
       "description": "Polish layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Czech": {
       "launch_path": "/index.html#cz",
       "description": "Czech layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "French": {
       "launch_path": "/index.html#fr",
       "description": "French layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "German": {
       "launch_path": "/index.html#de",
       "description": "German layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Norwegian Bokmal": {
       "launch_path": "/index.html#nb",
       "description": "Norwegian Bokmal layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Slovak": {
       "launch_path": "/index.html#sk",
       "description": "Slovak layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Turkish": {
       "launch_path": "/index.html#tr",
       "description": "Turkish layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Russian": {
       "launch_path": "/index.html#ru",
       "description": "Russian layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Serbian (Cyrillic)": {
       "launch_path": "/index.html#sr-Cyrl",
       "description": "Serbian (Cyrillic) layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Arabic": {
       "launch_path": "/index.html#ar",
       "description": "Arabic layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Hebrew": {
       "launch_path": "/index.html#he",
       "description": "Hebrew layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "Greek": {
       "launch_path": "/index.html#el",
       "description": "Greek layout",
-      "type": ["text"]
+      "type": ["url", "text"]
     },
     "number": {
       "launch_path": "/index.html#numberLayout",
@@ -100,8 +111,12 @@
   },
   "locales": {
     "en-US": {
-      "name": "Keyboard",
-      "description": "Gaia Keyboard"
+      "name": "Firefox OS Keyboard",
+      "description": "Firefox OS Keyboard"
+    },
+    "zh-TW": {
+      "name": "Firefox OS 鍵盤",
+      "description": "Firefox OS 鍵盤"
     }
   },
   "default_locale": "en-US"
