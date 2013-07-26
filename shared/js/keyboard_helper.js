@@ -71,11 +71,11 @@ var KeyboardHelper = {
         var entryPoints = app.manifest.entry_points;
         for (var name in entryPoints) {
           var launchPath = entryPoints[name].launch_path;
-          if (!entryPoints[name].type) {
+          if (!entryPoints[name].types) {
             console.warn('the keyboard app did not declare type.');
             continue;
           }
-          var supportTypes = entryPoints[name].type;
+          var supportTypes = entryPoints[name].types;
           supportTypes.forEach(function(type) {
             if (!type || !(type in TYPE_GROUP))
               return;
