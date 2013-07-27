@@ -1536,6 +1536,39 @@
       -->
     </section>
 
+    <!-- Personalization :: Keyboard :: Select Keyboard :: Add More Keyboards -->
+    <section role="region" id="keyboard-selection-addMore">
+      <!--
+      <header>
+        <a href="#keyboard-selection"><span class="icon icon-back">back</span></a>
+        <h1 data-l10n-id="addMoreKeyboards"> Add more keyboards </h1>
+      </header>
+
+      <div id="keyboardAppContainer">
+      </div>
+      -->
+    </section>
+
+    <!-- Personalization :: Keyboard :: Select Keyboard -->
+    <section role="region" id="keyboard-selection">
+      <!--
+      <header>
+        <a href="#keyboard"><span class="icon icon-back">back</span></a>
+        <h1 data-l10n-id="selectKeyboard"> Select keyboard </h1>
+      </header>
+
+      <div>
+        <ul id="enabledKeyboardList">
+        </ul>
+        <ul>
+          <li>
+            <button data-l10n-id="addMoreKeyboards" data-href="#keyboard-selection-addMore">Add more keyboards</button>
+          </li>
+        </ul>
+      </div>
+      -->
+    </section>
+
     <!-- Personalization :: Keyboard -->
     <section role="region" id="keyboard">
       <!--
@@ -1545,7 +1578,7 @@
       </header>
 
       <div>
-        <ul>
+        <ul hidden>
           <li>
             <label class="pack-checkbox">
               <input type="checkbox" name="keyboard.vibration"/>
@@ -1574,6 +1607,17 @@
             </label>
             <a data-l10n-id="wordSuggestion">Word Suggestion</a>
           </li>
+        </ul>
+
+        <ul>
+          <li>
+            <a href="#keyboard-selection" data-l10n-id="activeKeyboard">Active keyboard</a>
+          </li>
+        </ul>
+        <header>
+          <h2 data-l10n-id="installed">Installed</h2>
+        </header>
+        <ul id="allKeyboardList" hidden>
         </ul>
 
         <div id="textLayoutList" hidden>
