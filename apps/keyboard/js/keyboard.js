@@ -430,6 +430,19 @@ function initKeyboard() {
 
   // Handle resize events
   window.addEventListener('resize', onResize);
+
+  if (!document.mozHidden) {
+    //XXX: so far we cannot get state from IME WebAPI
+    var state = {
+      type: 'text',
+      choices: null,
+      value: '',
+      inputmode: '',
+      selectionStart: 0,
+      selectionEnd: 0
+    };
+    showKeyboard(state);
+  }
 }
 
 function handleKeyboardSound() {
