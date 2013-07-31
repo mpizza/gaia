@@ -3,7 +3,7 @@
   "description": "Firefox OS Keyboard",
   "type": "certified",
   "role": "keyboard",
-  "launch_path": "/index.html#settings",
+  "launch_path": "/settings.html",
   "developer": {
     "name": "The Gaia Team",
     "url": "https://github.com/mozilla-b2g/gaia"
