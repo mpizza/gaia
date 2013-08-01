@@ -320,12 +320,13 @@ var KeyboardContext = (function() {
   var _isReady = false;
   var _callbacks = [];
 
-  var Keyboard = function(name, description, launchPath, layouts) {
+  var Keyboard = function(name, description, launchPath, layouts, app) {
     return {
       name: name,
       description: description,
       launchPath: launchPath,
-      layouts: layouts
+      layouts: layouts,
+      app: app
     };
   };
 
@@ -417,7 +418,7 @@ var KeyboardContext = (function() {
         _keyboards.push(Keyboard(keyboardManifest.name,
                                  keyboardManifest.description,
                                  keyboardManifest.launch_path,
-                                 layouts));
+                                 layouts, rawKeyboard));
       });
 
       callback();
@@ -475,17 +476,21 @@ var KeyboardContext = (function() {
 var KeyboardPanel = (function() {
   var _keyboardTemplate = function kl_keyboardTemplate(keyboard, recycled) {
     var container = null;
-    var link;
+    var span;
     if (recycled) {
       container = recycled;
-      link = container.querySelector('a');
+      span = container.querySelector('span');
     } else {
       container = document.createElement('li');
-      link = document.createElement('a');
-      container.appendChild(link);
+      span = document.createElement('span');
+      container.appendChild(span);
+
+      container.addEventListener('click', function() {
+        keyboard.app.launch();
+      });
     }
 
-    link.textContent = keyboard.name;
+    span.textContent = keyboard.name;
     return container;
   };
 
