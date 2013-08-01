@@ -1,10 +1,8 @@
-require('/shared/js/l10n.js');
-
 requireApp('clock/js/utils.js');
 requireApp('clock/js/alarmsdb.js');
 requireApp('clock/js/alarm_edit.js');
 requireApp('clock/js/alarm_manager.js');
-requireApp('clock/js/alarm.js');
+requireApp('clock/js/alarm_list.js');
 
 suite('AlarmEditView', function() {
   var subject;
