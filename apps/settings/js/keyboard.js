@@ -13,6 +13,11 @@ const TYPE_GROUP = {
 const SETTINGS_KEY = 'keyboard.enabled-layouts';
 */
 
+
+/*
+ * An Observable is able to notify its property change. It is initialized by an
+ * ordinary object.
+ */
 var Observable = function(obj) {
   var _eventHandlers = {};
   var _observable = {
@@ -63,6 +68,11 @@ var Observable = function(obj) {
   return _observable;
 };
 
+/*
+ * An ObservableArray is able to notify its change through four basic operations
+ * including 'insert', 'remove', 'replace', 'reset'. It is initialized by an
+ * ordinary array.
+ */
 var ObservableArray = function(array) {
   var _array = array || [];
   var _eventHandlers = {
@@ -168,6 +178,12 @@ var ObservableArray = function(array) {
   };
 };
 
+/*
+ * A ListView takes an ObservableArray or an ordinary array, and generate the
+ * corresponding DOM elements of the content in the array using the specified
+ * template function. If the array is an ObservableArray, ListView updates the
+ * DOM elements accordingly when the array is manipulated.
+ */
 var ListView = function(root, observableArray, templateFunc) {
   var _observableArray = null;
   var _root = root;
@@ -268,12 +284,16 @@ var ListView = function(root, observableArray, templateFunc) {
 
       _observableArray = observableArray;
       if (_observableArray) {
-        _observableArray.observe('insert', _handleEvent);
-        _observableArray.observe('remove', _handleEvent);
-        _observableArray.observe('replace', _handleEvent);
-        _observableArray.observe('reset', _handleEvent);
+        if (_observableArray.constructor === Array) {
+          _insert(0, _observableArray);
+        } else {
+          _observableArray.observe('insert', _handleEvent);
+          _observableArray.observe('remove', _handleEvent);
+          _observableArray.observe('replace', _handleEvent);
+          _observableArray.observe('reset', _handleEvent);
 
-        _insert(0, _observableArray.array);
+          _insert(0, _observableArray.array);
+        }
       }
     }
   };
@@ -282,11 +302,18 @@ var ListView = function(root, observableArray, templateFunc) {
   return view;
 };
 
+/*
+ * KeyboardContext provides installed keyboard apps and enabled keyboard layouts
+ * in terms of ObservableArrays. It listens to the changes of installed apps
+ * (not finished yet) and keyboard.enabled-layouts, and update the
+ * ObservableArrays.
+ */
 var KeyboardContext = (function() {
   var SETTINGS_KEY = 'keyboard.enabled-layouts';
   var _layoutSetting = null;
-  var _keyboardDict = null; // stores layouts indexed by appName
+  var _layoutDict = null; // stores layout indexed by app.origin/layoutName
 
+  var _enabledLayoutSetting = null;
   var _keyboards = ObservableArray([]);
   var _enabledLayouts = ObservableArray([]);
 
@@ -302,31 +329,37 @@ var KeyboardContext = (function() {
     };
   };
 
-  var Layout = function(name, appName, description, types, index, enabled) {
-    var _observable = Observable({
-      name: name,
-      appName: appName,
-      description: description,
-      types: types,
-      index: index,
-      enabled: enabled
-    });
-
-    // Layout enabled changed. write the change to mozSettings.
-    _observable.observe('enabled', function(newValue, oldValue) {
-      Settings.getSettings(function(result) {
-        var enabledLayouts = _JSON2Obj(result[SETTINGS_KEY]);
-        if (enabledLayouts) {
-          types.forEach(function(type) {
-            if (enabledLayouts[type]) {
-              enabledLayouts[type][index].enabled = newValue;
-            }
-          });
-          var obj = {};
-          obj[SETTINGS_KEY] = JSON.stringify(enabledLayouts);
-          Settings.mozSettings.createLock().set(obj);
-        }
+  var Layout =
+    function(name, appName, appOrigin, description, types, enabled) {
+      var _observable = Observable({
+        name: name,
+        appName: appName,
+        description: description,
+        types: types,
+        enabled: enabled
       });
+
+      // Layout enabled changed. write the change to mozSettings.
+      _observable.observe('enabled', function(newValue, oldValue) {
+        Settings.getSettings(function(result) {
+          var enabledLayouts = _JSON2Obj(result[SETTINGS_KEY]);
+          if (enabledLayouts) {
+            for (var i = 0; i < enabledLayouts.length; i++) {
+              var layout = enabledLayouts[i];
+              if (layout.origin === appOrigin && layout.name === name) {
+                if (layout.enabled !== newValue) {
+                  layout.enabled = newValue;
+
+                  // popup/push to enabled layouts
+                  var obj = {};
+                  obj[SETTINGS_KEY] = JSON.stringify(enabledLayouts);
+                  Settings.mozSettings.createLock().set(obj);
+                }
+                break;
+              }
+            }
+          }
+        });
     });
 
     return _observable;
@@ -340,78 +373,51 @@ var KeyboardContext = (function() {
     }
   };
 
-  var _refreshKeyboardDict = function() {
-    if (!_layoutSetting)
-      return;
+  var _refreshEnabledLayout = function(enabledLayoutSetting) {
+    _enabledLayoutSetting = enabledLayoutSetting;
 
-    var layoutTypeDict = {}; // stores types indexed by appName and name
-    var layoutMap = {};
-    _keyboardDict = {};
-
-    for (var type in TYPE_GROUP) {
-      var rawLayouts = _layoutSetting[type];
-      if (rawLayouts) {
-        rawLayouts.forEach(function(rawLayout) {
-          // add to layoutTypeDict
-          var appInfo = layoutTypeDict[rawLayout.appName];
-          if (!appInfo) {
-            appInfo = layoutTypeDict[rawLayout.appName] = {};
-          }
-          var layoutTypes = appInfo[rawLayout.name];
-          if (!layoutTypes) {
-            layoutTypes = appInfo[rawLayout.name] = [];
-          }
-          layoutTypes.push(type);
-
-          // add to keyboardDict
-          var keyboard = _keyboardDict[rawLayout.appName];
-          if (!keyboard) {
-            keyboard = _keyboardDict[rawLayout.appName] = ObservableArray([]);
-          }
-          var layout = layoutMap[rawLayout.name];
-          if (layout) {
-            layout.types.push(type);
-          } else {
-            var newLayout = Layout(rawLayout.name, rawLayout.appName,
-                                   rawLayout.description,
-                                   [type], rawLayout.index,
-                                   rawLayout.enabled);
-            layoutMap[rawLayout.name] = newLayout;
-            keyboard.push(newLayout);
-          }
-        });
-      }
-    }
-
-    _refreshEnabledLayout();
-  };
-
-  var _refreshEnabledLayout = function() {
-    KeyboardHelper.getInstalledKeyboards(function(allKeyboards) {
-      var enabledLayouts = [];
-      allKeyboards.forEach(function(rawKeyboard) {
-        var layouts = _keyboardDict[rawKeyboard.manifest.name];
-        if (layouts) {
-          layouts.forEach(function(layout) {
-            if (layout.enabled) {
-              enabledLayouts.push(layout);
-            }
-          });
+    var enabledLayouts = [];
+    _enabledLayoutSetting.forEach(function(rawLayout) {
+      var layout = _layoutDict[rawLayout.origin + '/' + rawLayout.name];
+      if (layout) {
+        if (rawLayout.enabled) {
+          enabledLayouts.push(layout);
         }
-      });
-
-      _enabledLayouts.reset(enabledLayouts);
+        layout.enabled = rawLayout.enabled;
+      }
     });
+
+    _enabledLayouts.reset(enabledLayouts);
   };
 
   var _initInstalledKeyboards = function(callback) {
     KeyboardHelper.getInstalledKeyboards(function(allKeyboards) {
+      _layoutDict = {};
+
       allKeyboards.forEach(function(rawKeyboard) {
-        var manifest = rawKeyboard.manifest;
-        _keyboards.push(Keyboard(manifest.name,
-                                 manifest.description,
-                                 manifest.launch_path,
-                                 _keyboardDict[manifest.name]));
+        // get all layouts in a keyboard app
+        var keyboardManifest = rawKeyboard.manifest;
+        var entryPoints = keyboardManifest.entry_points;
+        var layouts = [];
+
+        for (var name in entryPoints) {
+          var rawLayout = entryPoints[name];
+          var launchPath = rawLayout.launch_path;
+          if (!entryPoints[name].types) {
+            console.warn('the keyboard app did not declare type.');
+            continue;
+          }
+          var layout = Layout(name, keyboardManifest.name,
+                              rawKeyboard.origin, rawLayout.description,
+                              rawLayout.types, false);
+          layouts.push(layout);
+          _layoutDict[rawKeyboard.origin + '/' + name] = layout;
+        }
+
+        _keyboards.push(Keyboard(keyboardManifest.name,
+                                 keyboardManifest.description,
+                                 keyboardManifest.launch_path,
+                                 layouts));
       });
 
       callback();
@@ -421,16 +427,16 @@ var KeyboardContext = (function() {
   var _init = function(callback) {
     Settings.mozSettings.addObserver(SETTINGS_KEY,
       function(event) {
-        _layoutSetting = _JSON2Obj(event.settingValue);
-        _refreshKeyboardDict();
+        _refreshEnabledLayout(_JSON2Obj(event.settingValue));
     });
 
     Settings.getSettings(function(result) {
       var setting = result[SETTINGS_KEY];
       if (setting) {
-        _layoutSetting = _JSON2Obj(setting);
-        _refreshKeyboardDict();
-        _initInstalledKeyboards(callback);
+        _initInstalledKeyboards(function() {
+          _refreshEnabledLayout(_JSON2Obj(setting));
+          callback();
+        });
       }
     });
   };
@@ -498,7 +504,7 @@ var KeyboardPanel = (function() {
   };
 })();
 
-var KeyboardSelectionPanel = (function() {
+var EnabledLayoutsPanel = (function() {
   var _layoutTemplate = function ks_layoutTemplate(layout, recycled) {
     var container = null;
     var span;
@@ -520,7 +526,7 @@ var KeyboardSelectionPanel = (function() {
       this.initEnabledLayoutListView();
     },
 
-    initEnabledLayoutListView: function ks_initEnabledLayoutListView() {
+    initEnabledLayoutListView: function ks_initEnabledLayoutLV() {
       KeyboardContext.enabledLayouts(function(enabledLayouts) {
         var ul = document.getElementById('enabledKeyboardList');
         ListView(ul, enabledLayouts, _layoutTemplate);
@@ -529,7 +535,7 @@ var KeyboardSelectionPanel = (function() {
   };
 })();
 
-var KeyboardSelectionAddMorePanel = (function() {
+var InstalledLayoutsPanel = (function() {
   var _layoutTemplate = function ksa_layoutTemplate(layout, recycled) {
     var container = null;
     var layoutName, checkbox;
@@ -568,10 +574,10 @@ var KeyboardSelectionAddMorePanel = (function() {
 
   return {
     init: function ksa_init() {
-      this.initAllLayoutListView();
+      this.initInstalledLayoutListView();
     },
 
-    initAllLayoutListView: function ksa_initAllLayoutListView() {
+    initInstalledLayoutListView: function ksa_initInstalledLayoutLV() {
       KeyboardContext.keyboards(function(keyboards) {
         var container = document.getElementById('keyboardAppContainer');
         keyboards.forEach(function(keyboard) {
@@ -587,6 +593,6 @@ var KeyboardSelectionAddMorePanel = (function() {
 
 navigator.mozL10n.ready(function keyboard_init() {
   KeyboardPanel.init();
-  KeyboardSelectionPanel.init();
-  KeyboardSelectionAddMorePanel.init();
+  EnabledLayoutsPanel.init();
+  InstalledLayoutsPanel.init();
 });
