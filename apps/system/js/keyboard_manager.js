@@ -17,9 +17,9 @@ const TYPE_GROUP_MAPPING = {
   // text
   'text': 'text',
   'textarea': 'text',
-  'url': 'text',
-  'email': 'text',
-  'password': 'text',
+  'url': 'url',
+  'email': 'email',
+  'password': 'password',
   'search': 'text',
   // number
   'number': 'number',
@@ -112,6 +112,7 @@ var KeyboardManager = {
       // filter out disabled layouts
       for (var type in allLayouts) {
         self.keyboardLayouts[type] = [];
+        self.keyboardLayouts[type].activit = 0;
         for (var i in allLayouts[type]) {
           if (allLayouts[type][i].enabled)
             self.keyboardLayouts[type].push(allLayouts[type][i]);
@@ -122,14 +123,15 @@ var KeyboardManager = {
       var initIndex = self.showingLayout.index;
       self.launchLayoutFrame(self.keyboardLayouts[initType][initIndex]);
     }
-    if (evt) {
-      // update because of observing settings change
-      var allLayouts = JSON.parse(evt.settingValue);
-      resetLayoutList(allLayouts);
-    } else {
-      // update because of initializing
-      KeyboardHelper.getAllLayouts(resetLayoutList);
-    }
+    KeyboardHelper.getAllLayouts(resetLayoutList);
+    // if (evt) {
+    //   // update because of observing settings change
+    //   // var allLayouts = JSON.parse(evt.settingValue);
+    //   // resetLayoutList(allLayouts);
+    // } else {
+    //   // update because of initializing
+    //   KeyboardHelper.getAllLayouts(resetLayoutList);
+    // }
   },
 
   inputFocusChange: function km_inputFocusChange(evt) {
@@ -158,8 +160,10 @@ var KeyboardManager = {
       } else {
         self._debug('get focus event');
         // by the order in Settings app, we should display
-        // the first (default) one.
-        self.setKeyboardToShow(group, 0);
+        // if target group (input type) does not exist, use text for default
+        if (!self.keyboardLayouts[group])
+          group = 'text';
+        self.setKeyboardToShow(group, self.keyboardLayouts[group].activit);
         self.showKeyboard();
       }
     }, FOCUS_CHANGE_DELAY);
@@ -249,7 +253,9 @@ var KeyboardManager = {
         this.switchChangeTimeout = setTimeout(function keyboardSwitchLayout() {
           var length = self.keyboardLayouts[showed.type].length;
           var index = (showed.index + 1) % length;
-
+          if (!self.keyboardLayouts[showed.type])
+              showed.type = 'text';
+          self.keyboardLayouts[showed.type].activit = index;
           self.resetShowingKeyboard();
           self.setKeyboardToShow(showed.type, index);
         }, FOCUS_CHANGE_DELAY);
@@ -270,6 +276,9 @@ var KeyboardManager = {
           // https://bugzilla.mozilla.org/show_bug.cgi?id=859708
           // https://bugzilla.mozilla.org/show_bug.cgi?id=859713
           ListMenu.request(items, 'Layout selection', function(selectedIndex) {
+            if (!self.keyboardLayouts[showed.type])
+              showed.type = 'text';
+            self.keyboardLayouts[showed.type].activit = selectedIndex;
             self.setKeyboardToShow(showed.type, selectedIndex);
             self.showKeyboard();
           }, null);
@@ -350,12 +359,7 @@ var KeyboardManager = {
   },
 
   updateLayoutSettings: function km_updateLayoutSettings() {
-    KeyboardHelper.getInstalledLayouts(function(allLayouts) {
-      var obj = {};
-      obj[SETTINGS_KEY] = JSON.stringify(allLayouts);
-      var settings = window.navigator.mozSettings;
-      settings.createLock().set(obj);
-    });
+    KeyboardHelper.getAllLayouts(resetLayoutList);
   },
 
   setKeyboardToShow: function km_setKeyboardToShow(group, index) {
