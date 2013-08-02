@@ -188,8 +188,13 @@ var ListView = function(root, observableArray, templateFunc) {
   var _observableArray = null;
   var _root = root;
   var _templateFunc = templateFunc;
+  var _enabled = true;
 
   var _handleEvent = function(event) {
+    if (!_enabled) {
+      return;
+    }
+
     var data = event.data;
     switch (event.type) {
       case 'insert':
@@ -275,6 +280,12 @@ var ListView = function(root, observableArray, templateFunc) {
     }
   };
 
+  var _enabledChanged = function() {
+    if (_enabled) {
+      _reset(_observableArray.array);
+    }
+  };
+
   var view = {
     set: function lv_set(observableArray) {
       // clear all existing items
@@ -295,6 +306,17 @@ var ListView = function(root, observableArray, templateFunc) {
           _insert(0, _observableArray.array);
         }
       }
+    },
+
+    set enabled(value) {
+      if (_enabled !== value) {
+        _enabled = value;
+        _enabledChanged();
+      }
+    },
+
+    get enabled() {
+      return _enabled;
     }
   };
 
@@ -310,7 +332,6 @@ var ListView = function(root, observableArray, templateFunc) {
  */
 var KeyboardContext = (function() {
   var SETTINGS_KEY = 'keyboard.enabled-layouts';
-  var _layoutSetting = null;
   var _layoutDict = null; // stores layout indexed by app.origin/layoutName
 
   var _enabledLayoutSetting = null;
@@ -342,25 +363,23 @@ var KeyboardContext = (function() {
 
       // Layout enabled changed. write the change to mozSettings.
       _observable.observe('enabled', function(newValue, oldValue) {
-        Settings.getSettings(function(result) {
-          var enabledLayouts = _JSON2Obj(result[SETTINGS_KEY]);
-          if (enabledLayouts) {
-            for (var i = 0; i < enabledLayouts.length; i++) {
-              var layout = enabledLayouts[i];
-              if (layout.origin === appOrigin && layout.name === name) {
-                if (layout.enabled !== newValue) {
-                  layout.enabled = newValue;
+        var enabledLayouts = _enabledLayoutSetting;
+        if (enabledLayouts) {
+          for (var i = 0; i < enabledLayouts.length; i++) {
+            var layout = enabledLayouts[i];
+            if (layout.origin === appOrigin && layout.name === name) {
+              if (layout.enabled !== newValue) {
+                layout.enabled = newValue;
 
-                  // popup/push to enabled layouts
-                  var obj = {};
-                  obj[SETTINGS_KEY] = JSON.stringify(enabledLayouts);
-                  Settings.mozSettings.createLock().set(obj);
-                }
-                break;
+                // popup/push to enabled layouts
+                var obj = {};
+                obj[SETTINGS_KEY] = JSON.stringify(enabledLayouts);
+                Settings.mozSettings.createLock().set(obj);
               }
+              break;
             }
           }
-        });
+        }
     });
 
     return _observable;
@@ -473,7 +492,22 @@ var KeyboardContext = (function() {
   };
 })();
 
+var Panel = function(url) {
+  var _url = url;
+  var _panel = Observable({
+    visible: (_url === Settings.currentPanel)
+  });
+
+  window.addEventListener('panelready', function() {
+    _panel.visible = (_url === Settings.currentPanel);
+  });
+
+  return _panel;
+};
+
 var KeyboardPanel = (function() {
+  var _panel = null;
+  var _listView = null;
   var _keyboardTemplate = function kl_keyboardTemplate(keyboard, recycled) {
     var container = null;
     var span;
@@ -494,22 +528,31 @@ var KeyboardPanel = (function() {
     return container;
   };
 
-  return {
-    init: function kl_init() {
-      this.initAllKeyboardListView();
-    },
+  var _initAllKeyboardListView = function() {
+    KeyboardContext.keyboards(function(keyboards) {
+      var ul = document.getElementById('allKeyboardList');
+      ul.hidden = (keyboards.length == 0);
+      _listView = ListView(ul, keyboards, _keyboardTemplate);
+      _listView.enabled = _panel.visible;
+    });
+  };
 
-    initAllKeyboardListView: function kl_initKeyboardLV() {
-      KeyboardContext.keyboards((function(keyboards) {
-        var ul = document.getElementById('allKeyboardList');
-        ul.hidden = (keyboards.length == 0);
-        ListView(ul, keyboards, _keyboardTemplate);
-      }).bind(this));
+  var _visibilityChanged = function(visible) {
+    _listView.enabled = visible;
+  };
+
+  return {
+    init: function kl_init(url) {
+      _panel = Panel(url);
+      _panel.observe('visible', _visibilityChanged);
+      _initAllKeyboardListView();
     }
   };
 })();
 
 var EnabledLayoutsPanel = (function() {
+  var _panel = null;
+  var _listView = null;
   var _layoutTemplate = function ks_layoutTemplate(layout, recycled) {
     var container = null;
     var span;
@@ -526,21 +569,30 @@ var EnabledLayoutsPanel = (function() {
     return container;
   };
 
-  return {
-    init: function ks_init() {
-      this.initEnabledLayoutListView();
-    },
+  var _initEnabledLayoutListView = function() {
+    KeyboardContext.enabledLayouts(function(enabledLayouts) {
+      var ul = document.getElementById('enabledKeyboardList');
+      _listView = ListView(ul, enabledLayouts, _layoutTemplate);
+      _listView.enabled = _panel.visible;
+    });
+  };
 
-    initEnabledLayoutListView: function ks_initEnabledLayoutLV() {
-      KeyboardContext.enabledLayouts(function(enabledLayouts) {
-        var ul = document.getElementById('enabledKeyboardList');
-        ListView(ul, enabledLayouts, _layoutTemplate);
-      });
+  var _visibilityChanged = function(visible) {
+    _listView.enabled = visible;
+  };
+
+  return {
+    init: function ks_init(url) {
+      _panel = Panel(url);
+      _panel.observe('visible', _visibilityChanged);
+      _initEnabledLayoutListView();
     }
   };
 })();
 
 var InstalledLayoutsPanel = (function() {
+  var _panel = null;
+  var _listView = null;
   var _layoutTemplate = function ksa_layoutTemplate(layout, recycled) {
     var container = null;
     var layoutName, checkbox;
@@ -577,27 +629,40 @@ var InstalledLayoutsPanel = (function() {
     return container;
   };
 
-  return {
-    init: function ksa_init() {
-      this.initInstalledLayoutListView();
-    },
+  var _initInstalledLayoutListView = function() {
+    KeyboardContext.keyboards(function(keyboards) {
+      var container = document.getElementById('keyboardAppContainer');
+      keyboards.forEach(function(keyboard) {
+        var header = document.createElement('header');
+        var h2 = document.createElement('h2');
+        var ul = document.createElement('ul');
 
-    initInstalledLayoutListView: function ksa_initInstalledLayoutLV() {
-      KeyboardContext.keyboards(function(keyboards) {
-        var container = document.getElementById('keyboardAppContainer');
-        keyboards.forEach(function(keyboard) {
-          var ul = document.createElement('ul');
-          container.appendChild(ul);
-          var listView = ListView(ul, keyboard.layouts,
-            _layoutTemplate);
-        });
+        h2.textContent = keyboard.name;
+        header.appendChild(h2);
+        container.appendChild(header);
+        container.appendChild(ul);
+        _listView = ListView(ul, keyboard.layouts,
+          _layoutTemplate);
+        _listView.enabled = _panel.visible;
       });
+    });
+  };
+
+  var _visibilityChanged = function(visible) {
+    _listView.enabled = visible;
+  };
+
+  return {
+    init: function ksa_init(url) {
+      _panel = Panel(url);
+      _panel.observe('visible', _visibilityChanged);
+      _initInstalledLayoutListView();
     }
   };
 })();
 
 navigator.mozL10n.ready(function keyboard_init() {
-  KeyboardPanel.init();
-  EnabledLayoutsPanel.init();
-  InstalledLayoutsPanel.init();
+  KeyboardPanel.init('#keyboard');
+  EnabledLayoutsPanel.init('#keyboard-selection');
+  InstalledLayoutsPanel.init('#keyboard-selection-addMore');
 });
