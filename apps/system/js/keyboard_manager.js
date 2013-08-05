@@ -72,7 +72,7 @@ var KeyboardManager = {
 
   focusChangeTimeout: 0,
   switchChangeTimeout: 0,
-  _onDebug: true,
+  _onDebug: false,
   _debug: function km_debug(msg) {
     if (this._onDebug)
       console.log('[Keyboard Manager] ' + msg);
@@ -96,6 +96,8 @@ var KeyboardManager = {
     // when an inline activity goes away.
     window.addEventListener('appwillclose', this);
     window.addEventListener('activitywillclose', this);
+    window.addEventListener('applicationinstall', this);
+    window.addEventListener('applicationuninstall', this);
 
     window.navigator.mozKeyboard.onfocuschange =
       this.inputFocusChange.bind(this);
@@ -124,14 +126,6 @@ var KeyboardManager = {
       self.launchLayoutFrame(self.keyboardLayouts[initType][initIndex]);
     }
     KeyboardHelper.getAllLayouts(resetLayoutList);
-    // if (evt) {
-    //   // update because of observing settings change
-    //   // var allLayouts = JSON.parse(evt.settingValue);
-    //   // resetLayoutList(allLayouts);
-    // } else {
-    //   // update because of initializing
-    //   KeyboardHelper.getAllLayouts(resetLayoutList);
-    // }
   },
 
   inputFocusChange: function km_inputFocusChange(evt) {
@@ -331,12 +325,12 @@ var KeyboardManager = {
         this.removeKeyboard(origin);
         break;
       case 'applicationinstall': //app installed
-        this.updateLayoutSettings();
+        KeyboardHelper.updateKeyboardSettings();
         break;
       case 'applicationuninstall': //app uninstalled
         var origin = evt.detail.application.origin;
         this.removeKeyboard(origin);
-        this.updateLayoutSettings();
+        KeyboardHelper.updateKeyboardSettings();
         break;
     }
   },

@@ -367,14 +367,12 @@ var KeyboardContext = (function() {
         if (enabledLayouts) {
           for (var i = 0; i < enabledLayouts.length; i++) {
             var layout = enabledLayouts[i];
-            if (layout.origin === appOrigin && layout.name === name) {
+            if (layout.appOrigin === appOrigin && layout.layoutName === name) {
               if (layout.enabled !== newValue) {
                 layout.enabled = newValue;
 
-                // popup/push to enabled layouts
-                var obj = {};
-                obj[SETTINGS_KEY] = JSON.stringify(enabledLayouts);
-                Settings.mozSettings.createLock().set(obj);
+                KeyboardHelper.setLayoutEnabled(appOrigin, layout.layoutName,
+                layout.enabled);
               }
               break;
             }
@@ -398,7 +396,8 @@ var KeyboardContext = (function() {
 
     var enabledLayouts = [];
     _enabledLayoutSetting.forEach(function(rawLayout) {
-      var layout = _layoutDict[rawLayout.origin + '/' + rawLayout.name];
+      var layout = _layoutDict[rawLayout.appOrigin + '/' +
+       rawLayout.layoutName];
       if (layout) {
         if (rawLayout.enabled) {
           enabledLayouts.push(layout);
