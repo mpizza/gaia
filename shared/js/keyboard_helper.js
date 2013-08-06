@@ -20,8 +20,6 @@ const TYPE_GROUP = {
 const SETTINGS_KEY = 'keyboard.enabled-layouts';
 
 var KeyboardHelper = {
-  keyboardLayoutsByType: {},
-
   keyboardSettings: [],
 
   _debugMode: false,
@@ -31,97 +29,39 @@ var KeyboardHelper = {
       console.log('[keyboard_helper]' + string);
   },
 
-  getAllLayouts: function kh_getAllLayouts(callback) {
-    this._debug('getAllLayouts');
-    var self = this;
-    self.getKeyboardSettings(function() {
-      self.getInstalledLayouts(function(apps) {
-        for (var i in self.keyboardSettings) {
-          var origin = self.keyboardSettings[i].appOrigin;
-          var name = self.keyboardSettings[i].layoutName;
-          var layoutEnabled = self.keyboardSettings[i].enabled;
-          if (!layoutEnabled)
-            continue;
-          self.setLayoutEnable(origin, name, layoutEnabled);
-        }
-        callback(self.keyboardLayoutsByType);
-      });
-    });
+  init: function kh_init() {
+    this.getKeyboardSettings();
+
+    // update keyboardSettings
+    var settings = window.navigator.mozSettings;
+    settings.addObserver(SETTINGS_KEY, this.getKeyboardSettings.bind(this));
   },
 
   setLayoutEnabled: function kh_setLayoutEnabled(appOrigin, layoutName,
   enabled) {
-    var self = this;
-    self.getKeyboardSettings(function() {
-      for (var i = 0; i < self.keyboardSettings.length; i++) {
-        if (self.keyboardSettings[i].appOrigin === appOrigin &&
-          self.keyboardSettings[i].layoutName === layoutName) {
-          self.keyboardSettings[i].enabled = enabled;
-          self.saveToSettings();
-          break;
-        }
+    for (var i = 0; i < this.keyboardSettings.length; i++) {
+      if (this.keyboardSettings[i].appOrigin === appOrigin &&
+        this.keyboardSettings[i].layoutName === layoutName) {
+        this.keyboardSettings[i].enabled = enabled;
+        this.saveToSettings();
+        break;
       }
-    });
+    }
   },
 
-  getLayoutEnabled: function kh_getLayoutEnabled(appOrigin, layoutName,
-    callback) {
-    var self = this;
-    self.getKeyboardSettings(function() {
-      for (var i = 0; i < self.keyboardSettings.length; i++) {
-        if (self.keyboardSettings[i].appOrigin == appOrigin &&
-          self.keyboardSettings[i].layoutName == layoutName) {
-          getValue = self.keyboardSettings[i].enabled;
-          callback(getValue);
-          break;
-        }
+  getLayoutEnabled: function kh_getLayoutEnabled(appOrigin, layoutName) {
+    var enabledValue = false;
+    for (var i = 0; i < this.keyboardSettings.length; i++) {
+      if (this.keyboardSettings[i].appOrigin == appOrigin &&
+        this.keyboardSettings[i].layoutName == layoutName) {
+        enabledValue = this.keyboardSettings[i].enabled;
+        break;
       }
-    });
+    }
+    return enabledValue;
   },
 
-  updateKeyboardSettings: function kh_updateKeyboardSettings() {
-    var self = this;
-    self.getKeyboardSettings(function() {
-      var temSettings = self.keyboardSettings;
-      self.getInstalledLayouts(function(apps) {
-        // generate new settings
-        self.keyboardSettings = [];
-        apps.forEach(function(app) {
-          var entryPoints = app.manifest.entry_points;
-          for (var name in entryPoints) {
-            var launchPath = entryPoints[name].launch_path;
-            if (!entryPoints[name].types) {
-              console.warn('the keyboard app did not declare type.');
-              continue;
-            }
-            // for settings
-            self.keyboardSettings.push({
-              'layoutName': name,
-              'appOrigin': app.origin,
-              'enabled': false
-            });
-          }
-        });
-
-        for (var i in temSettings) {
-          if (!temSettings[i].enabled)
-            continue;
-          var layoutName = temSettings[i].layoutName;
-          var layoutOrigin = temSettings[i].appOrigin;
-          for (var j in self.keyboardSettings) {
-            if (self.keyboardSettings[j].layoutName === layoutName &&
-              self.keyboardSettings[j].appOrigin === layoutOrigin) {
-              self.keyboardSettings[j].enabled = true;
-            }
-          }
-        }
-        self.saveToSettings();
-
-      });
-    });
-  },
-
-  getKeyboardSettings: function kh_getKeyboardSettings(callback) {
+  getKeyboardSettings: function kh_getKeyboardSettings() {
     var self = this;
     var settings = window.navigator.mozSettings;
     var request = settings.createLock().get(SETTINGS_KEY);
@@ -129,7 +69,7 @@ var KeyboardHelper = {
       var value = request.result[SETTINGS_KEY];
       if (!value) {
         //XXX write settings back, this shouldn't happen.
-        self.getInstalledLayouts(function(apps) {
+        self.getInstalledKeyboards(function(apps) {
           self.keyboardSettings = [];
           apps.forEach(function(app) {
             var entryPoints = app.manifest.entry_points;
@@ -148,29 +88,46 @@ var KeyboardHelper = {
             }
           });
 
-          // init settings and keyboard layout
-          var allLayouts = self.keyboardLayoutsByType;
-          for (var type in allLayouts) {
-            var layoutOrigin = allLayouts[type][0].origin;
-            var layoutName = allLayouts[type][0].name;
-            //XXX default enable should be get from locals form.
-            allLayouts[type][0].enabled = true;
-            for (var i in self.keyboardSettings) {
-              if (self.keyboardSettings[i].layoutName == layoutName &&
-                  self.keyboardSettings[i].appOrigin == layoutOrigin) {
+          // XXX init settings should be get by language
+          // http://bugzil.al/863719
+          var defaultLayout = [];
+
+          var protocol = window.location.protocol;
+          var hackOrigin = 'app://keyboard.gaiamobile.org';
+          if (protocol === 'http:') {
+            hackOrigin = 'http://keyboard.gaiamobile.org:8080';
+          }
+
+          defaultLayout.push({
+            'layoutName': 'English',
+            'appOrigin': hackOrigin
+          });
+
+          defaultLayout.push({
+            'layoutName': 'number',
+            'appOrigin': hackOrigin
+          });
+
+          for (var j = 0; j < defaultLayout.length; j++) {
+            var appOrigin = defaultLayout[j].appOrigin;
+            var layoutName = defaultLayout[j].layoutName;
+            for (var i = 0; i < self.keyboardSettings.length; i++) {
+              if (self.keyboardSettings[i].appOrigin === appOrigin &&
+                self.keyboardSettings[i].layoutName === layoutName) {
                 self.keyboardSettings[i].enabled = true;
                 break;
               }
             }
           }
+
           self.saveToSettings();
         });
       } else {
         self.keyboardSettings = JSON.parse(value);
       }
-
-      if (callback)
-        callback();
+      var evt = document.createEvent('CustomEvent');
+      evt.initCustomEvent('keyboardsrefresh', true, false, {});
+      window.dispatchEvent(evt);
     };
   },
 
@@ -179,18 +136,6 @@ var KeyboardHelper = {
     var obj = {};
     obj[SETTINGS_KEY] = JSON.stringify(this.keyboardSettings);
     settings.createLock().set(obj);
-  },
-
-  setLayoutEnable: function kh_setLayoutEnable(origin, name, layoutEnabled) {
-    for (var type in this.keyboardLayoutsByType) {
-      for (var i in this.keyboardLayoutsByType[type]) {
-        if (origin === this.keyboardLayoutsByType[type][i].origin &&
-          name === this.keyboardLayoutsByType[type][i].name) {
-          this.keyboardLayoutsByType[type][i].enabled = layoutEnabled;
-          break;
-        }
-      }
-    }
   },
 
   getInstalledKeyboards: function kh_getInstalledKeyboards(callback) {
@@ -217,41 +162,7 @@ var KeyboardHelper = {
       if (keyboardApps.length > 0 && callback)
         callback(keyboardApps);
     };
-  },
-
-  getInstalledLayouts: function kh_getInstalledLayouts(callback) {
-    var self = this;
-    self.getInstalledKeyboards(function parseLayouts(apps) {
-      self.keyboardLayoutsByType = {};
-      apps.forEach(function(app) {
-        var entryPoints = app.manifest.entry_points;
-        for (var name in entryPoints) {
-          var launchPath = entryPoints[name].launch_path;
-          if (!entryPoints[name].types) {
-            console.warn('the keyboard app did not declare type.');
-            continue;
-          }
-          var supportTypes = entryPoints[name].types;
-          supportTypes.forEach(function(type) {
-            if (!type || !(type in TYPE_GROUP))
-              return;
-
-            if (!self.keyboardLayoutsByType[type])
-              self.keyboardLayoutsByType[type] = [];
-
-            self.keyboardLayoutsByType[type].push({
-              'name': name,
-              'appName': app.manifest.name,
-              'origin': app.origin,
-              'path': launchPath,
-              'index': self.keyboardLayoutsByType[type].length,
-              'enabled': false
-            });
-          });
-        }
-      });
-      if (callback)
-        callback(apps);
-    });
   }
 };
+
+KeyboardHelper.init();
