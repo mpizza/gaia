@@ -86,10 +86,6 @@ var KeyboardManager = {
     // get enabled keyboard from mozSettings, parse their manifest
     this.updateLayouts();
 
-    //register settings change
-    var settings = window.navigator.mozSettings;
-    settings.addObserver(SETTINGS_KEY, this.updateLayouts.bind(this));
-
     // For Bug 812115: hide the keyboard when the app is closed here,
     // since it would take a longer round-trip to receive focuschange
     // Also in Bug 856692 we realise that we need to close the keyboard
@@ -98,6 +94,7 @@ var KeyboardManager = {
     window.addEventListener('activitywillclose', this);
     window.addEventListener('applicationinstall', this);
     window.addEventListener('applicationuninstall', this);
+    window.addEventListener('keyboardsrefresh', this);
 
     window.navigator.mozKeyboard.onfocuschange =
       this.inputFocusChange.bind(this);
@@ -109,23 +106,54 @@ var KeyboardManager = {
 
   updateLayouts: function km_updateLayouts(evt) {
     var self = this;
-    function resetLayoutList(allLayouts) {
+    function resetLayoutList(apps) {
       self.keyboardLayouts = {};
       // filter out disabled layouts
-      for (var type in allLayouts) {
-        self.keyboardLayouts[type] = [];
-        self.keyboardLayouts[type].activit = 0;
-        for (var i in allLayouts[type]) {
-          if (allLayouts[type][i].enabled)
-            self.keyboardLayouts[type].push(allLayouts[type][i]);
-        }
-      }
+      self.parseLayoutType(apps);
       self.showingLayout.reset();
       var initType = self.showingLayout.type;
       var initIndex = self.showingLayout.index;
       self.launchLayoutFrame(self.keyboardLayouts[initType][initIndex]);
     }
-    KeyboardHelper.getAllLayouts(resetLayoutList);
+    KeyboardHelper.getInstalledKeyboards(resetLayoutList);
+  },
+
+  parseLayoutType: function km_parseLayoutType(apps) {
+    var self = this;
+    apps.forEach(function(app) {
+      var entryPoints = app.manifest.entry_points;
+      for (var name in entryPoints) {
+        var launchPath = entryPoints[name].launch_path;
+        if (!entryPoints[name].types) {
+          console.warn('the keyboard app did not declare type.');
+          continue;
+        }
+        var appOrigin = app.origin;
+        var layoutName = name;
+
+        if (!KeyboardHelper.getLayoutEnabled(appOrigin, layoutName)) {
+          continue;
+        }
+
+        var supportTypes = entryPoints[name].types;
+        supportTypes.forEach(function(type) {
+          if (!type || !(type in TYPE_GROUP))
+            return;
+
+          if (!self.keyboardLayouts[type])
+            self.keyboardLayouts[type] = [];
+            self.keyboardLayouts[type].activit = 0;
+
+          self.keyboardLayouts[type].push({
+            'name': name,
+            'appName': app.manifest.name,
+            'origin': app.origin,
+            'path': launchPath,
+            'index': self.keyboardLayouts[type].length
+          });
+        });
+      }
+    });
   },
 
   inputFocusChange: function km_inputFocusChange(evt) {
@@ -325,12 +353,15 @@ var KeyboardManager = {
         this.removeKeyboard(origin);
         break;
       case 'applicationinstall': //app installed
-        KeyboardHelper.updateKeyboardSettings();
+        this.updateLayoutSettings();
         break;
       case 'applicationuninstall': //app uninstalled
         var origin = evt.detail.application.origin;
         this.removeKeyboard(origin);
-        KeyboardHelper.updateKeyboardSettings();
+        this.updateLayoutSettings();
+        break;
+      case 'keyboardsrefresh': // keyboard settings update
+        this.updateLayouts();
         break;
     }
   },
@@ -353,7 +384,41 @@ var KeyboardManager = {
   },
 
   updateLayoutSettings: function km_updateLayoutSettings() {
-    KeyboardHelper.getAllLayouts(resetLayoutList);
+    //KeyboardHelper.updateKeyboardSettings();
+    var temSettings = KeyboardHelper.keyboardSettings;
+    KeyboardHelper.getInstalledKeyboards(function(apps) {
+      KeyboardHelper.keyboardSettings = [];
+      apps.forEach(function(app) {
+        var entryPoints = app.manifest.entry_points;
+        for (var name in entryPoints) {
+          var launchPath = entryPoints[name].launch_path;
+          if (!entryPoints[name].types) {
+            console.warn('the keyboard app did not declare type.');
+            continue;
+          }
+          // for settings
+          KeyboardHelper.keyboardSettings.push({
+            'layoutName': name,
+            'appOrigin': app.origin,
+            'enabled': false
+          });
+        }
+      });
+
+      for (var i in temSettings) {
+        if (!temSettings[i].enabled)
+          continue;
+        var layoutName = temSettings[i].layoutName;
+        var layoutOrigin = temSettings[i].appOrigin;
+        for (var j in KeyboardHelper.keyboardSettings) {
+          if (KeyboardHelper.keyboardSettings[j].layoutName === layoutName &&
+            KeyboardHelper.keyboardSettings[j].appOrigin === layoutOrigin) {
+            KeyboardHelper.keyboardSettings[j].enabled = true;
+          }
+        }
+      }
+      KeyboardHelper.saveToSettings();
+    });
   },
 
   setKeyboardToShow: function km_setKeyboardToShow(group, index) {
