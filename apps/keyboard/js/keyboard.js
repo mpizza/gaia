@@ -1621,19 +1621,14 @@ function switchKeyboard(target) {
 }
 
 function switchToNextIME() {
-  // XXX: this is a hack to inform keyboard manager to switch to next IME
-  // before we got the IME API v2 implemented
-  var url = document.location.href + '#keyboard-test=switchlayout';
-  window.open(url);
+  var mgmt = navigator.mozInputMethod.mgmt;
+  mgmt.next();
 }
 
 
 function showIMEList() {
-  // XXX: this is a hack to inform keyboard manager to show IME list
-  // before we got the IME API v2 implemented
-  var url = document.location.href +
-            '#keyboard-test=showlayoutlist';
-  window.open(url);
+  var mgmt = navigator.mozInputMethod.mgmt;
+  mgmt.showAll();
 }
 
 // Turn to default values

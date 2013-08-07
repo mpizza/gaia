@@ -98,6 +98,17 @@ var KeyboardManager = {
 
     window.navigator.mozKeyboard.onfocuschange =
       this.inputFocusChange.bind(this);
+
+    // To handle keyboard layout switching
+    window.addEventListener('mozChromeEvent', function(evt) {
+      if (evt.detail.type === 'input-method-show-picker') {
+        console.log('Show keyboard switching UI');
+        self.showAll();
+      } else if (evt.detail.type === 'input-method-switch-to-next') {
+        console.log('Switch to next input method');
+        self.switchToNext();
+      }
+    });
   },
 
   getHeight: function kn_getHeight() {
@@ -260,81 +271,38 @@ var KeyboardManager = {
       return;
     evt.stopPropagation();
 
-    var showed = this.showingLayout;
-    if (!showed.frame || !url.contains(showed.frame.dataset.frameOrigin))
-      return;
 
     var urlparser = document.createElement('a');
     urlparser.href = url;
     var keyword = urlparser.hash.split('=')[1];
 
+    // should be a number that represents the keyboard height
+    this.keyboardHeight = parseInt(keyword);
+
     var self = this;
-    switch (keyword) {
-      case 'switchlayout':
-        clearTimeout(this.switchChangeTimeout);
-        this.switchChangeTimeout = setTimeout(function keyboardSwitchLayout() {
-          var length = self.keyboardLayouts[showed.type].length;
-          var index = (showed.index + 1) % length;
-          if (!self.keyboardLayouts[showed.type])
-              showed.type = 'text';
-          self.keyboardLayouts[showed.type].activit = index;
-          self.resetShowingKeyboard();
-          self.setKeyboardToShow(showed.type, index);
-        }, FOCUS_CHANGE_DELAY);
-        break;
-      case 'showlayoutlist':
-        clearTimeout(this.switchChangeTimeout);
-        this.switchChangeTimeout = setTimeout(function keyboardLayoutList() {
-          var items = [];
-          self.keyboardLayouts[showed.type].forEach(function(layout, index) {
-            var label = layout.appName + ' ' + layout.name;
-            items.push({
-              label: label,
-              value: index
-            });
-          });
-          self.hideKeyboard();
-          //XXX the menu is not scrollable now, and it will take focus away
-          // https://bugzilla.mozilla.org/show_bug.cgi?id=859708
-          // https://bugzilla.mozilla.org/show_bug.cgi?id=859713
-          ListMenu.request(items, 'Layout selection', function(selectedIndex) {
-            if (!self.keyboardLayouts[showed.type])
-              showed.type = 'text';
-            self.keyboardLayouts[showed.type].activit = selectedIndex;
-            self.setKeyboardToShow(showed.type, selectedIndex);
-            self.showKeyboard();
-          }, null);
-        }, FOCUS_CHANGE_DELAY);
-        break;
-      default:
-        // if there is only one number, it should be update height
-        self.keyboardHeight = parseInt(keyword);
-
-        var updateHeight = function km_updateHeight() {
-          self.keyboardFrameContainer.removeEventListener(
-              'transitionend', updateHeight);
-          if (self.keyboardFrameContainer.classList.contains('hide')) {
-            // The keyboard has been closed already, let's not resize the
-            // application and ends up with half apps.
-            return;
-          }
-          // to do
-          var detail = {
-            'detail': {
-              'height': self.keyboardHeight
-            }
-          };
-          window.dispatchEvent(new CustomEvent('keyboardchange', detail));
-        };
-
-        if (this.keyboardFrameContainer.classList.contains('hide')) {
-          this.showKeyboard();
-          this.keyboardFrameContainer.addEventListener(
-              'transitionend', updateHeight);
-        } else {
-          updateHeight();
+    var updateHeight = function km_updateHeight() {
+      self.keyboardFrameContainer.removeEventListener(
+        'transitionend', updateHeight);
+      if (self.keyboardFrameContainer.classList.contains('hide')) {
+        // The keyboard has been closed already, let's not resize the
+        // application and ends up with half apps.
+        return;
+      }
+      // to do
+      var detail = {
+        'detail': {
+          'height': self.keyboardHeight
         }
-        break;
+      };
+      window.dispatchEvent(new CustomEvent('keyboardchange', detail));
+    };
+
+    if (this.keyboardFrameContainer.classList.contains('hide')) {
+      this.showKeyboard();
+      this.keyboardFrameContainer.addEventListener(
+        'transitionend', updateHeight);
+    } else {
+      updateHeight();
     }
   },
 
@@ -466,6 +434,52 @@ var KeyboardManager = {
     this.keyboardHeight = 0;
     window.dispatchEvent(new CustomEvent('keyboardhide'));
     this.keyboardFrameContainer.classList.add('hide');
+  },
+
+  switchToNext: function km_switchToNext() {
+    clearTimeout(this.switchChangeTimeout);
+
+    var self = this;
+    var showed = this.showingLayout;
+
+    this.switchChangeTimeout = setTimeout(function keyboardSwitchLayout() {
+      var length = self.keyboardLayouts[showed.type].length;
+      var index = (showed.index + 1) % length;
+      if (!self.keyboardLayouts[showed.type])
+        showed.type = 'text';
+      self.keyboardLayouts[showed.type].activit = index;
+      self.resetShowingKeyboard();
+      self.setKeyboardToShow(showed.type, index);
+    }, FOCUS_CHANGE_DELAY);
+  },
+
+  showAll: function km_showAll() {
+    clearTimeout(this.switchChangeTimeout);
+
+    var self = this;
+    var showed = this.showingLayout;
+
+    this.switchChangeTimeout = setTimeout(function keyboardLayoutList() {
+      var items = [];
+      self.keyboardLayouts[showed.type].forEach(function(layout, index) {
+        var label = layout.appName + ' ' + layout.name;
+        items.push({
+          label: label,
+          value: index
+        });
+      });
+      self.hideKeyboard();
+      //XXX the menu is not scrollable now, and it will take focus away
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=859708
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=859713
+      ListMenu.request(items, 'Layout selection', function(selectedIndex) {
+        if (!self.keyboardLayouts[showed.type])
+          showed.type = 'text';
+        self.keyboardLayouts[showed.type].activit = selectedIndex;
+        self.setKeyboardToShow(showed.type, selectedIndex);
+        self.showKeyboard();
+      }, null);
+    }, FOCUS_CHANGE_DELAY);
   }
 };
 
