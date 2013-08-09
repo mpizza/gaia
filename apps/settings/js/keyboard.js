@@ -3,16 +3,13 @@
 
 'use strict';
 
-/* We will get this const definition from shared/js/keyboard_helper.js
-const TYPE_GROUP = {
-  'text': true,
-  'number': true,
-  'option': true
-}
-
-const SETTINGS_KEY = 'keyboard.enabled-layouts';
-*/
-
+/*
+ * The script depends shared/js/keyboard_helper.js. KeyboardHelper helps on the
+ * following things:
+ * - Get all installed keyboard apps and layouts.
+ * - Enable or disable keyboard layouts.
+ * - Notify keyboard layout changes via the 'keyboardsrefresh' event.
+ */
 
 /*
  * An Observable is able to notify its property change. It is initialized by an
@@ -332,9 +329,8 @@ var ListView = function(root, observableArray, templateFunc) {
  */
 var KeyboardContext = (function() {
   var SETTINGS_KEY = 'keyboard.enabled-layouts';
-  var _layoutDict = null; // stores layout indexed by app.origin/layoutName
+  var _layoutDict = null; // stores layout indexed by appOrigin and layoutName
 
-  var _enabledLayoutSetting = null;
   var _keyboards = ObservableArray([]);
   var _enabledLayouts = ObservableArray([]);
 
@@ -363,10 +359,10 @@ var KeyboardContext = (function() {
 
       // Layout enabled changed. write the change to mozSettings.
       _observable.observe('enabled', function(newValue, oldValue) {
-        var enabledLayouts = _enabledLayoutSetting;
-        if (enabledLayouts) {
-          for (var i = 0; i < enabledLayouts.length; i++) {
-            var layout = enabledLayouts[i];
+        var keyboardSettings = KeyboardHelper.keyboardSettings;
+        if (keyboardSettings) {
+          for (var i = 0; i < keyboardSettings.length; i++) {
+            var layout = keyboardSettings[i];
             if (layout.appOrigin === appOrigin && layout.layoutName === name) {
               if (layout.enabled !== newValue) {
                 layout.enabled = newValue;
@@ -383,33 +379,29 @@ var KeyboardContext = (function() {
     return _observable;
   };
 
-  var _JSON2Obj = function(jsonStr) {
-    if (jsonStr) {
-      return JSON.parse(jsonStr);
-    } else {
-      return null;
-    }
-  };
-
-  var _refreshEnabledLayout = function(enabledLayoutSetting) {
-    _enabledLayoutSetting = enabledLayoutSetting;
-
+  var _refreshEnabledLayout = function() {
     var enabledLayouts = [];
-    _enabledLayoutSetting.forEach(function(rawLayout) {
-      var layout = _layoutDict[rawLayout.appOrigin + '/' +
-       rawLayout.layoutName];
-      if (layout) {
-        if (rawLayout.enabled) {
-          enabledLayouts.push(layout);
-        }
-        layout.enabled = rawLayout.enabled;
-      }
-    });
+    var keyboardSettings = KeyboardHelper.keyboardSettings;
 
+    if (keyboardSettings) {
+      keyboardSettings.forEach(function(rawLayout) {
+        var keyboard, layout;
+
+        keyboard = _layoutDict[rawLayout.appOrigin];
+        layout = keyboard ? keyboard[rawLayout.layoutName] : null;
+
+        if (layout) {
+          if (rawLayout.enabled) {
+            enabledLayouts.push(layout);
+          }
+          layout.enabled = rawLayout.enabled;
+        }
+      });
+    }
     _enabledLayouts.reset(enabledLayouts);
   };
 
-  var _initInstalledKeyboards = function(callback) {
+  var _refreshInstalledKeyboards = function(callback) {
     KeyboardHelper.getInstalledKeyboards(function(allKeyboards) {
       _layoutDict = {};
 
@@ -419,6 +411,7 @@ var KeyboardContext = (function() {
         var entryPoints = keyboardManifest.entry_points;
         var layouts = [];
 
+        _layoutDict[rawKeyboard.origin] = {};
         for (var name in entryPoints) {
           var rawLayout = entryPoints[name];
           var launchPath = rawLayout.launch_path;
@@ -430,7 +423,7 @@ var KeyboardContext = (function() {
                               rawKeyboard.origin, rawLayout.description,
                               rawLayout.types, false);
           layouts.push(layout);
-          _layoutDict[rawKeyboard.origin + '/' + name] = layout;
+          _layoutDict[rawKeyboard.origin][name] = layout;
         }
 
         _keyboards.push(Keyboard(keyboardManifest.name,
@@ -444,19 +437,18 @@ var KeyboardContext = (function() {
   };
 
   var _init = function(callback) {
-    Settings.mozSettings.addObserver(SETTINGS_KEY,
-      function(event) {
-        _refreshEnabledLayout(_JSON2Obj(event.settingValue));
+    window.addEventListener('keyboardsrefresh', function() {
+      /*
+       * XXX: The event contains information including layout enabled/disabled,
+       *      keyboard installed/uninstalled, and keyboard change. We should
+       *      have finer events in the future.
+       */
+      _refreshEnabledLayout();
     });
 
-    Settings.getSettings(function(result) {
-      var setting = result[SETTINGS_KEY];
-      if (setting) {
-        _initInstalledKeyboards(function() {
-          _refreshEnabledLayout(_JSON2Obj(setting));
-          callback();
-        });
-      }
+    _refreshInstalledKeyboards(function() {
+      _refreshEnabledLayout();
+      callback();
     });
   };
 
