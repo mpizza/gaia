@@ -328,7 +328,6 @@ var ListView = function(root, observableArray, templateFunc) {
  * ObservableArrays.
  */
 var KeyboardContext = (function() {
-  var SETTINGS_KEY = 'keyboard.enabled-layouts';
   var _layoutDict = null; // stores layout indexed by appOrigin and layoutName
 
   var _keyboards = ObservableArray([]);
@@ -357,7 +356,7 @@ var KeyboardContext = (function() {
         enabled: enabled
       });
 
-      // Layout enabled changed. write the change to mozSettings.
+      // Layout enabled changed.
       _observable.observe('enabled', function(newValue, oldValue) {
         var keyboardSettings = KeyboardHelper.keyboardSettings;
         if (keyboardSettings) {
