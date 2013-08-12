@@ -508,20 +508,34 @@ var ThreadUI = global.ThreadUI = {
     this.enableSend();
   },
 
+  // scroll position is considered as "manual" if the view is not completely
+  // scrolled to the bottom
+  isScrolledManually: false,
+
   // We define an edge for showing the following chunk of elements
   manageScroll: function thui_manageScroll(oEvent) {
+    var scrollTop = this.container.scrollTop;
+    var scrollHeight = this.container.scrollHeight;
+    var clientHeight = this.container.clientHeight;
+
+    this.isScrolledManually = ((scrollTop + clientHeight) < scrollHeight);
+
     // kEdge will be the limit (in pixels) for showing the next chunk
     var kEdge = 30;
-    var currentScroll = this.container.scrollTop;
-    if (currentScroll < kEdge) {
-      var previous = this.container.scrollHeight;
+    if (scrollTop < kEdge) {
       this.showChunkOfMessages(this.CHUNK_SIZE);
       // We update the scroll to the previous position
       // taking into account the previous offset to top
       // and the current height due to we have added a new
       // chunk of visible messages
       this.container.scrollTop =
-        (this.container.scrollHeight - previous) + currentScroll;
+        (this.container.scrollHeight - scrollHeight) + scrollTop;
+    }
+  },
+
+  scrollViewToBottom: function thui_scrollViewToBottom() {
+    if (!this.isScrolledManually) {
+      this.container.scrollTop = this.container.scrollHeight;
     }
   },
 
@@ -612,10 +626,6 @@ var ThreadUI = global.ThreadUI = {
       (window.location.hash == '#new' && !hasRecipients);
 
     this.sendButton.disabled = disableSendMessage;
-  },
-
-  scrollViewToBottom: function thui_scrollViewToBottom() {
-    this.container.scrollTop = this.container.scrollHeight;
   },
 
   // updates the counter for sms segments when in text only mode
@@ -939,6 +949,8 @@ var ThreadUI = global.ThreadUI = {
 
   createMmsContent: function thui_createMmsContent(dataArray) {
     var container = document.createDocumentFragment();
+    var scrollViewToBottom = ThreadUI.scrollViewToBottom.bind(ThreadUI);
+
     dataArray.forEach(function(messageData) {
       var mediaElement, textElement;
 
@@ -946,7 +958,7 @@ var ThreadUI = global.ThreadUI = {
         var attachment = new Attachment(messageData.blob, {
           name: messageData.name
         });
-        var mediaElement = attachment.render();
+        var mediaElement = attachment.render(scrollViewToBottom);
         container.appendChild(mediaElement);
         attachmentMap.set(mediaElement, attachment);
       }
@@ -1020,7 +1032,6 @@ var ThreadUI = global.ThreadUI = {
   // the classNames array also passed in, returns an HTML string
   _createNotDownloadedHTML:
   function thui_createNotDownloadedHTML(message, classNames) {
-
     var _ = navigator.mozL10n.get;
 
     // default strings:
@@ -1332,7 +1343,6 @@ var ThreadUI = global.ThreadUI = {
       }
       return;
     }
-
   },
 
   handleEvent: function thui_handleEvent(evt) {
@@ -1850,13 +1860,15 @@ var ThreadUI = global.ThreadUI = {
       return;
     }
 
-    var isContact = this.headerText.dataset.isContact;
     var number = this.headerText.dataset.number;
-    if (isContact === 'true') {
-      this.genPrompt(isContact, number);
+
+    if (this.headerText.dataset.isContact === 'true') {
+      this.promptContact({
+        number: number
+      });
     } else {
-      this.activateContact({
-        number: this.headerText.dataset.number,
+      this.prompt({
+        number: number,
         isContact: false
       });
     }
@@ -1867,16 +1879,21 @@ var ThreadUI = global.ThreadUI = {
     event.preventDefault();
 
     var target = event.target;
-    var isContact, number;
 
-    isContact = target.dataset.source === 'contacts' ? true : false;
-    number = target.dataset.number;
-    this.genPrompt(isContact, number);
+    this.promptContact({
+      number: target.dataset.number
+    });
   },
 
-  genPrompt: function thui_genPrompt(isContact, number) {
+  promptContact: function thui_promptContact(opts) {
+    opts = opts || {};
+
+    var inMessage = opts.inMessage || false;
+    var number = opts.number || '';
+
     Contacts.findByPhoneNumber(number, function(results) {
       var ul = document.createElement('ul');
+      var isContact = results && results.length;
       var contact = isContact ? results[0] : {
         tel: [{ value: number }]
       };
@@ -1891,10 +1908,11 @@ var ThreadUI = global.ThreadUI = {
         isSuggestion: false
       });
 
-      this.activateContact({
+      this.prompt({
         name: name,
         number: number,
         isContact: isContact,
+        inMessage: inMessage,
         body: ul
       });
     }.bind(this));
@@ -1943,15 +1961,15 @@ var ThreadUI = global.ThreadUI = {
     });
   },
 
-  activateContact: function thui_activateContact(opt) {
+  prompt: function thui_prompt(opt) {
     function complete() {
       window.location.href = '#thread=' + Threads.lastId;
     }
 
     var _ = navigator.mozL10n.get;
     var thread = Threads.get(Threads.lastId || Threads.currentId);
-    var number = opt.number;
-    var email = opt.email;
+    var number = opt.number || '';
+    var email = opt.email || '';
     var name = opt.name || number || email;
     var isContact = opt.isContact || false;
     var inMessage = opt.inMessage || false;
@@ -2010,11 +2028,9 @@ var ThreadUI = global.ThreadUI = {
 
     // If this is a known contact, display an option menu
     // with buttons for "Call" and "Cancel"
-    if (isContact) {
+    params.section = typeof opt.body !== 'undefined' ? opt.body : name;
 
-      params.section = typeof opt.body !== 'undefined' ? opt.body : name;
-
-    } else {
+    if (!isContact) {
 
       props = [
         number ? {tel: number} : {email: email}
@@ -2051,7 +2067,6 @@ var ThreadUI = global.ThreadUI = {
     var options = new OptionMenu(params);
     options.show();
   },
-
 
   onCreateContact: function thui_onCreateContact() {
     ThreadListUI.updateContactsInfo();

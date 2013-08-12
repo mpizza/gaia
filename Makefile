@@ -48,6 +48,10 @@ NOFTU?=0
 # Automatically enable remote debugger
 REMOTE_DEBUGGER?=0
 
+ifeq ($(DEVICE_DEBUG), 1)
+REMOTE_DEBUGGER=1
+endif
+
 # We also disable FTU when running in Firefox or in debug mode
 ifeq ($(DEBUG),1)
 NOFTU=1
@@ -334,7 +338,7 @@ webapp-manifests: install-xulrunner-sdk
 	@#cat $(PROFILE_FOLDER)/webapps/webapps.json
 
 # Generate $(PROFILE_FOLDER)/webapps/APP/application.zip
-webapp-zip: install-xulrunner-sdk
+webapp-zip: webapp-optimize install-xulrunner-sdk
 ifneq ($(DEBUG),1)
 	@mkdir -p $(PROFILE_FOLDER)/webapps
 	@$(call run-js-command, webapp-zip)
@@ -402,7 +406,7 @@ reference-workload-x-heavy:
 
 # The install-xulrunner target arranges to get xulrunner downloaded and sets up
 # some commands for invoking it. But it is platform dependent
-XULRUNNER_SDK_URL=http://ftp.mozilla.org/pub/mozilla.org/xulrunner/nightly/2013/06/2013-06-11-03-11-40-mozilla-central/xulrunner-24.0a1.en-US.
+XULRUNNER_SDK_URL=http://ftp.mozilla.org/pub/mozilla.org/xulrunner/nightly/2013/08/2013-08-07-03-02-16-mozilla-central/xulrunner-26.0a1.en-US.
 
 ifeq ($(SYS),Darwin)
 # For mac we have the xulrunner-sdk so check for this directory
