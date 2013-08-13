@@ -507,6 +507,8 @@ var KeyboardPanel = (function() {
     } else {
       container = document.createElement('li');
       span = document.createElement('span');
+
+      container.classList.add('keyboard-menuItem');
       container.appendChild(span);
 
       container.addEventListener('click', function() {
