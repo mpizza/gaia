@@ -96,17 +96,21 @@ var KeyboardManager = {
     window.addEventListener('applicationuninstall', this);
     window.addEventListener('keyboardsrefresh', this);
 
-    window.navigator.mozKeyboard.onfocuschange =
-      this.inputFocusChange.bind(this);
-
     // To handle keyboard layout switching
     window.addEventListener('mozChromeEvent', function(evt) {
-      if (evt.detail.type === 'input-method-show-picker') {
+      if (evt.detail.type === 'inputmethod-showall') {
         console.log('Show keyboard switching UI');
         self.showAll();
-      } else if (evt.detail.type === 'input-method-switch-to-next') {
+      } else if (evt.detail.type === 'inputmethod-next') {
         console.log('Switch to next input method');
         self.switchToNext();
+      } else if (evt.detail.type === 'inputmethod-contextchange') {
+        var contextChangeEvent = {
+          'detail': {
+            'type': evt.detail.inputType
+          }
+        };
+        self.inputFocusChange(contextChangeEvent);
       }
     });
   },
@@ -169,10 +173,10 @@ var KeyboardManager = {
 
   inputFocusChange: function km_inputFocusChange(evt) {
     // let value selector notice the event
+
     window.dispatchEvent(new CustomEvent('inputfocuschange', evt));
 
-    var state = evt.detail;
-    var type = state.type;
+    var type = evt.detail.type;
 
     // Skip the <select> element and inputs with type of date/time,
     // handled in system app for now
