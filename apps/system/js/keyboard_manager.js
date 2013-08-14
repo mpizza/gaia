@@ -254,6 +254,22 @@ var KeyboardManager = {
   loadKeyboardLayout: function km_loadKeyboardLayout(layout) {
     if (!this.keyboardFrameContainer.classList.contains('hide'))
       this.hideKeyboard();
+
+    var keyFrames = this.keyboardFrameContainer.getElementsByTagName('iframe');
+    if (keyFrames.length == 1) {
+      var layoutFrame = keyFrames[0];
+      var origin = layoutFrame.dataset.frameOrigin;
+      this.removeKeyboard(origin);
+      // var name = layoutFrame.dataset.frameName;
+      // console.log('pizza inner'+keyFrames.length);
+      // if (this.showingLayout.frame.dataset.frameOrigin === origin) {
+      //   this.hideKeyboard();
+      // }
+      // window.removeChild(layoutFrame);
+      // delete this.runningLayouts[origin][name];
+      // console.log('pizza layout:'+origin+':'+name);
+    }
+
     // Generate a <iframe mozbrowser> containing the keyboard.
     var keyboardURL = layout.origin + layout.path;
     var manifestURL = layout.origin + '/manifest.webapp';
