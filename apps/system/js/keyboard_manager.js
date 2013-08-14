@@ -99,10 +99,10 @@ var KeyboardManager = {
     // To handle keyboard layout switching
     window.addEventListener('mozChromeEvent', function(evt) {
       if (evt.detail.type === 'inputmethod-showall') {
-        console.log('Show keyboard switching UI');
+        self._debug('Show keyboard switching UI');
         self.showAll();
       } else if (evt.detail.type === 'inputmethod-next') {
-        console.log('Switch to next input method');
+        self._debug('Switch to next input method');
         self.switchToNext();
       } else if (evt.detail.type === 'inputmethod-contextchange') {
         var contextChangeEvent = {
@@ -189,7 +189,6 @@ var KeyboardManager = {
     clearTimeout(this.focusChangeTimeout);
     this.focusChangeTimeout = setTimeout(function keyboardFocusChanged() {
       var group = TYPE_GROUP_MAPPING[type];
-      var index = self.showingLayout.index;
 
       if (type === 'blur') {
         self._debug('get blur event');
@@ -253,6 +252,8 @@ var KeyboardManager = {
   },
 
   loadKeyboardLayout: function km_loadKeyboardLayout(layout) {
+    if (!this.keyboardFrameContainer.classList.contains('hide'))
+      this.hideKeyboard();
     // Generate a <iframe mozbrowser> containing the keyboard.
     var keyboardURL = layout.origin + layout.path;
     var manifestURL = layout.origin + '/manifest.webapp';
@@ -356,7 +357,6 @@ var KeyboardManager = {
   },
 
   updateLayoutSettings: function km_updateLayoutSettings() {
-    //KeyboardHelper.updateKeyboardSettings();
     var temSettings = KeyboardHelper.keyboardSettings;
     KeyboardHelper.getInstalledKeyboards(function(apps) {
       KeyboardHelper.keyboardSettings = [];
