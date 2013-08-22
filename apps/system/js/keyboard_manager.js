@@ -72,7 +72,7 @@ var KeyboardManager = {
 
   focusChangeTimeout: 0,
   switchChangeTimeout: 0,
-  _onDebug: false,
+  _onDebug: true,
   _debug: function km_debug(msg) {
     if (this._onDebug)
       console.log('[Keyboard Manager] ' + msg);
@@ -252,8 +252,8 @@ var KeyboardManager = {
   },
 
   loadKeyboardLayout: function km_loadKeyboardLayout(layout) {
-    if (!this.keyboardFrameContainer.classList.contains('hide'))
-      this.hideKeyboard();
+    // if (!this.keyboardFrameContainer.classList.contains('hide'))
+    //   this.hideKeyboard();
 
     // var keyFrames =
     // this.keyboardFrameContainer.getElementsByTagName('iframe');
@@ -463,14 +463,35 @@ var KeyboardManager = {
     var self = this;
     var showed = this.showingLayout;
 
+    self._debug('pizza switchToNext' + showed.type);
+
     this.switchChangeTimeout = setTimeout(function keyboardSwitchLayout() {
       var length = self.keyboardLayouts[showed.type].length;
       var index = (showed.index + 1) % length;
       if (!self.keyboardLayouts[showed.type])
         showed.type = 'text';
+
+      var layout = self.keyboardLayouts[showed.type][index];
       self.keyboardLayouts[showed.type].activit = index;
-      self.resetShowingKeyboard();
-      self.setKeyboardToShow(showed.type, index);
+      self._debug('pizza origin' + showed.frame.dataset.frameOrigin);
+      self._debug('pizza origin' + layout.origin);
+      if (showed.frame.dataset.frameOrigin === layout.origin) {
+        self.resetShowingKeyboard();
+        self.setKeyboardToShow(showed.type, index);
+      } else {
+        self.keyboardFrameContainer.classList.add('hide');
+        window.dispatchEvent(new CustomEvent('keyboardhide'));
+        var onHideEnd = function km_onHideEnd() {
+          self.keyboardFrameContainer.removeEventListener('transitionend',
+              onHideEnd);
+          self.keyboardHeight = 0;
+          self._debug('pizza transitionend' + layout.origin);
+          self.resetShowingKeyboard();
+          self.setKeyboardToShow(showed.type, index);
+        };
+        self.keyboardFrameContainer.addEventListener('transitionend',
+            onHideEnd);
+      }
     }, FOCUS_CHANGE_DELAY);
   },
 
