@@ -85,7 +85,7 @@ var KeyboardManager = {
 
   focusChangeTimeout: 0,
   switchChangeTimeout: 0,
-  _onDebug: false,
+  _onDebug: true,
   _debug: function km_debug(msg) {
     if (this._onDebug)
       console.log('[Keyboard Manager] ' + msg);
@@ -391,6 +391,7 @@ var KeyboardManager = {
     if (this.keyboardFrameContainer.classList.contains('hide') &&
              this.keyboardFrameContainer.dataset.transitionOut !== 'true') {
       this.showKeyboard(updateHeight);
+      console.log('pizza showKeyboard');
     } else {
       updateHeight();
     }
@@ -400,6 +401,7 @@ var KeyboardManager = {
     var self = this;
     switch (evt.type) {
       case 'mozbrowserresize':
+        console.log('pizza mozbrowserresize');
         this.resizeKeyboard(evt);
         break;
       case 'attentionscreenshow':
@@ -464,11 +466,14 @@ var KeyboardManager = {
       this.showingLayout.frame.hidden = true;
       return;
     }
-
+    if (this.keyboardFrameContainer.dataset.transitionOut === 'true') {
+      delete this.keyboardFrameContainer.dataset.transitionOut;
+    }
     this.showingLayout.frame.hidden = false;
     this.setLayoutFrameActive(this.showingLayout.frame, true);
     this.showingLayout.frame.addEventListener(
          'mozbrowserresize', this, true);
+    console.log('pizza resize event');
   },
 
   showKeyboard: function km_showKeyboard(callback) {
@@ -552,6 +557,7 @@ var KeyboardManager = {
     this.showingLayout.frame.removeEventListener(
         'mozbrowserresize', this, true);
     this.showingLayout.reset();
+    console.log('pizza resetShowingKeyboard');
   },
 
   hideIMESwitcher: function km_hideIMESwitcher() {
@@ -580,8 +586,10 @@ var KeyboardManager = {
         return;
       }
 
-      self.resetShowingKeyboard();
-      delete self.keyboardFrameContainer.dataset.transitionOut;
+      if (this.keyboardFrameContainer.dataset.transitionOut === 'true') {
+        self.resetShowingKeyboard();
+        delete self.keyboardFrameContainer.dataset.transitionOut;
+      }
     };
     this.keyboardFrameContainer.addEventListener('transitionend',
       onTransitionEnd);
