@@ -428,15 +428,19 @@ var KeyboardManager = {
   },
 
   removeKeyboard: function km_removeKeyboard(origin, oom) {
+    console.log('@@@removeKeyboard');
+    var isShowing = false;
     if (!this.runningLayouts.hasOwnProperty(origin)) {
-      console.log('=== keyboard removeKeyboard ===');
       return;
     }
 
     if (this.showingLayout.frame &&
       this.showingLayout.frame.dataset.frameOrigin === origin) {
+      // remove focus
+      window.navigator.mozKeyboard.removeFocus();
       this.hideKeyboardImmediately();
-      console.log('=== keyboard removeKeyboard hideKeyboard ===');
+      // show keybaord again
+      isShowing = true;
     }
 
     for (var id in this.runningLayouts[origin]) {
@@ -451,8 +455,9 @@ var KeyboardManager = {
 
     delete this.runningLayouts[origin];
 
-    // make a fake click
-    if (oom) {
+    // revoke keyboard again
+    if (oom && isShowing) {
+      console.log('@@@removeKeyboard rev');
       if (this.currentType === null) {
         this.currentType = 'text';
       }
@@ -463,7 +468,6 @@ var KeyboardManager = {
       };
       this.inputFocusChange(evt);
     }
-
     // var cancel = {
     //   'title': 'ok'
     // };
