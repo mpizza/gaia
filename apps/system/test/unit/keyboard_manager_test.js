@@ -78,27 +78,27 @@ suite('KeyboardManager', function() {
 
   suite('Transitions', function() {
     setup(function(next) {
-      setTimeout(next, 500);
+      setTimeout(function() {
+        console.log('pizza 1');
+        next();
+      }, 500);
       this.sinon.stub(KeyboardManager, 'showIMESwitcher');
     });
 
-    test('showKeyboard triggers transition', function(next) {
-      var triggered = false;
-      KeyboardManager.keyboardFrameContainer.addEventListener('transitionend',
-        function() {
-          triggered = true;
-        });
-
-      KeyboardManager.showKeyboard();
-
+    function fakeTransitionend() {
       var fakeEvt = new CustomEvent('transitionend');
       fakeEvt.propertyName = 'transform';
       KeyboardManager.keyboardFrameContainer.dispatchEvent(fakeEvt);
+    }
 
-      setTimeout(function() {
-        assert.equal(triggered, true);
-        next();
-      }, 100);
+    test('showKeyboard triggers transition', function(done) {
+      var triggered = false;
+      KeyboardManager.keyboardFrameContainer.addEventListener('transitionend',
+        function() {
+          assert.ok(true);
+          done();
+        });
+      KeyboardManager.showKeyboard();
     });
 
     test('UpdateHeight waits until transition finished', function(next) {
@@ -204,7 +204,7 @@ suite('KeyboardManager', function() {
 
         // should be called immediately
         sinon.assert.callCount(callback, 1);
-
+        console.log('pizza 2');
         next();
       }, 100);
     });
