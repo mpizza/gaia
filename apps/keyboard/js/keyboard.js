@@ -377,7 +377,7 @@ function initKeyboard() {
     var inputMethodName = window.location.hash.substring(1);
     setKeyboardName(inputMethodName, function() {
       resetKeyboard();
-      showKeyboard();
+      showKeyboard('IMlog hashchange');
     });
   }, false);
 
@@ -391,7 +391,7 @@ function initKeyboard() {
     var inputMethodName = window.location.hash.substring(1);
     setKeyboardName(inputMethodName, function() {
       if (!document.mozHidden && inputContext) {
-        showKeyboard();
+        showKeyboard('IMlog mozvisibilitychange');
       } else {
         hideKeyboard();
       }
@@ -400,11 +400,14 @@ function initKeyboard() {
 
   window.navigator.mozInputMethod.oninputcontextchange = function() {
     inputContext = navigator.mozInputMethod.inputcontext;
-    if (!document.mozHidden && inputContext) {
-      showKeyboard();
-    } else {
-      hideKeyboard();
-    }
+    var inputMethodName = window.location.hash.substring(1);
+    setKeyboardName(inputMethodName, function() {
+      if (!document.mozHidden && inputContext) {
+        showKeyboard('IMlog inputcontextchange');
+      } else {
+        hideKeyboard();
+      }
+    });
   };
 
   // Initialize the current layout according to
@@ -1639,7 +1642,10 @@ function replaceSurroundingText(text, offset, length) {
 // This is called when we get an event from mozKeyboard.
 // The state argument is the data passed with that event, and includes
 // the input field type, its inputmode, its content, and the cursor position.
-function showKeyboard() {
+function showKeyboard(msg) {
+  if (typeof msg != 'undefined') {
+    console.log(msg);
+  }
   clearTimeout(hideKeyboardTimeout);
 
   inputContext = navigator.mozInputMethod.inputcontext;
@@ -1673,7 +1679,8 @@ function showKeyboard() {
     selectionEnd: inputContext.selectionEnd,
     value: ''
   };
-
+  console.log('IMlog keyboardName:' + keyboardName);
+  console.log('IMlog inputContext:' + inputContext.inputType);
   // everything.me uses this setting to improve searches,
   // but they really shouldn't.
   navigator.mozSettings.createLock().set({
