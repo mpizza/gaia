@@ -503,6 +503,11 @@
       return;
     }
 
+    if (typeof this.iframe.getScreenshot !== 'function') {
+      console.log('WIP no getScreenshot:' + callback.name);
+      callback();
+      return;
+    }
     var self = this;
     var invoked = false;
 
