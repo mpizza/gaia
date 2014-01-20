@@ -105,6 +105,7 @@ var WindowManager = (function() {
   // Make the specified app the displayed app.
   // Public function.  Pass null to make the homescreen visible
   function launch(origin) {
+    console.log('Tarako launch:' + origin);
     // If the origin is indeed valid we make that app as the displayed app.
     if (isRunning(origin)) {
       setDisplayedApp(origin);
@@ -550,6 +551,7 @@ var WindowManager = (function() {
     if (e.type != 'appopen' && e.type != 'mozbrowserloadend') {
       return;
     }
+    console.log('Tarako appopen or mozbrowserloadend');
 
     var iframe = e.target;
     if (iframe.dataset.enableAppLoaded != e.type) {
@@ -862,7 +864,7 @@ var WindowManager = (function() {
     }
 
     numRunningApps++;
-
+    console.log('Tarako appendFrame');
     return app;
   }
 
@@ -941,6 +943,7 @@ var WindowManager = (function() {
 
   // TODO: Remove this.
   function windowLauncher(e) {
+    console.log('Tarako launchapp');
     // TODO: Move into app window's attribute.
     var startTime = Date.now();
     var config = e.detail;
@@ -966,12 +969,14 @@ var WindowManager = (function() {
         setDisplayedApp();
       } else {
         if (!isRunning(config.origin)) {
+          console.log('Tarako: appendFrame');
           appendFrame(null, config.origin, config.url,
                       config.name, config.manifest, config.manifestURL);
         }
         // TODO: Move below iframe hack into app window.
         runningApps[config.origin].iframe.dataset.start = startTime;
         runningApps[config.origin].iframe.splash = splash;
+        console.log('Tarako: setDisplayedApp');
         setDisplayedApp(config.origin, null);
       }
     } else {

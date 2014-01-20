@@ -198,7 +198,7 @@
     }
 
     this.debug(this._transitionState);
-
+    console.log('pizza:' + this._transitionState);
     // If the app is the currently displayed app, switch to the homescreen
     if (this.isActive() && !this.isHomescreen) {
       // XXX: Refine this in transition state controller.
@@ -504,7 +504,7 @@
     }
 
     if (typeof this.iframe.getScreenshot !== 'function') {
-      console.log('WIP no getScreenshot:' + callback.name);
+      console.log('pizza no getScreenshot:' + callback.name);
       callback();
       return;
     }
