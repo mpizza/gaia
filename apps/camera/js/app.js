@@ -110,6 +110,7 @@ App.prototype.runControllers = function() {
   this.controllers.viewfinder(this);
   this.controllers.hud(this);
   this.controllers.controls(this);
+  this.controllers.softkey(this);
   debug('controllers run');
 };
 
@@ -185,6 +186,7 @@ App.prototype.bindEvents = function() {
 
   bind(this.win, 'beforeunload', this.onBeforeUnload);
   bind(this.win, 'keydown', this.onKeyDown);
+  bind(this.win, 'keypress', this.onKeyPress);
   bind(this.el, 'click', this.onClick);
   debug('events bound');
 };
@@ -506,10 +508,22 @@ App.prototype.listenForStopRecordingEvent = function() {
  * @param  {Event} e
  * @private
  */
+
+App.prototype.onKeyPress = function(e) {
+  console.log('pizza onKeyPress:' +JSON.stringify(e));
+};
+
 App.prototype.onKeyDown = function(e) {
   var key = e.key.toLowerCase();
   var type = this.settings.keyDownEvents.get(key);
-  if (type) { this.emit('keydown:' + type, e); }
+  // get from config first, if key exists in config
+  // it means this key belongs global key.
+  console.log('pizza onKeyDown:' + key);
+  if (type) { 
+    this.emit('keydown:' + type, e); 
+  } else {
+    this.emit('softkey', e);
+  }
 };
 
 

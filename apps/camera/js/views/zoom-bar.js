@@ -156,6 +156,7 @@ module.exports = View.extend({
 
     var lastValue = this._value;
     this._value = clamp(value, 0, 100);
+    console.log('pizza setValue:' + this._value + ':' + value);
     if (this._value === lastValue) {
       return;
     }
@@ -172,15 +173,19 @@ module.exports = View.extend({
       this.els.maxIndicator.classList.remove('active');
     }
 
+    this.updateTrack();
+
+    if (emitChange) {
+      this.emit('change', this._value);
+    }
+  },
+
+  updateTrack: function () {
     var self = this;
     window.requestAnimationFrame(function() {
       self.els.track.style.top = (100 - self._value) + '%';
       self.els.scrubber.style.bottom = self._value + '%';
     });
-
-    if (emitChange) {
-      this.emit('change', this._value);
-    }
   },
 
   setScrubberActive: function(active) {
