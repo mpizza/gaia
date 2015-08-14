@@ -47,6 +47,8 @@ ControlsController.prototype.bindEvents = function() {
   this.app.on('busy', this.onCameraBusy);
   this.app.on('localized', this.view.localize);
 
+  this.app.on('keydown:modechanged',this.onViewModeChanged);
+
   // View
   this.view.on('modechanged', this.onViewModeChanged);
   this.view.on('click:thumbnail', this.app.firer('preview'));
